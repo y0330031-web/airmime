@@ -598,35 +598,36 @@ export default function Home() {
   return (
     <main
       style={{
-        minHeight: "100vh",
+        height: "100vh",
+        overflow: "hidden",
         background: "#1B1A18",
         color: "#F4F1EA",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        padding: "24px 16px",
+        padding: "12px 16px",
       }}
     >
       <div
         style={{
-          width: "min(90vw, 1000px)",
+          width: "min(90vw, 1000px, 82vh)",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          marginBottom: "16px",
+          marginBottom: "8px",
         }}
       >
-        <h1 className={caveat.className} style={{ fontSize: "36px" }}>
+        <h1 className={caveat.className} style={{ fontSize: "28px" }}>
           AirMime
         </h1>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <span
             style={{
-              fontSize: "13px",
+              fontSize: "12px",
               color: "rgba(244,241,234,0.6)",
               border: "1px solid rgba(255,255,255,0.15)",
               borderRadius: "8px",
-              padding: "4px 10px",
+              padding: "3px 8px",
               letterSpacing: "2px",
             }}
           >
@@ -635,7 +636,7 @@ export default function Home() {
           <button
             onClick={handleLeaveRoom}
             style={{
-              fontSize: "13px",
+              fontSize: "12px",
               color: "rgba(244,241,234,0.6)",
               background: "transparent",
               border: "none",
@@ -651,12 +652,13 @@ export default function Home() {
       <div
         style={{
           position: "relative",
-          width: "min(90vw, 1000px)",
+          width: "min(90vw, 1000px, 82vh)",
           aspectRatio: "16 / 9",
           borderRadius: "12px",
           overflow: "hidden",
           background: "#1B1A18",
           boxShadow: "0 0 0 1px rgba(255,255,255,0.08)",
+          flexShrink: 0,
         }}
       >
         {/* 원본 비디오: 배경블러 켜져있거나 카메라 숨김이면 투명 처리 (계속 재생은 되어야 손/얼굴 인식이 작동함) */}
@@ -752,9 +754,9 @@ export default function Home() {
 
       <div
         style={{
-          marginTop: "20px",
+          marginTop: "10px",
           display: "flex",
-          gap: "8px",
+          gap: "6px",
           alignItems: "center",
           flexWrap: "wrap",
           justifyContent: "center",
@@ -769,8 +771,8 @@ export default function Home() {
               setShowHint(false);
             }}
             style={{
-              width: "28px",
-              height: "28px",
+              width: "24px",
+              height: "24px",
               borderRadius: "50%",
               background: c,
               border:
@@ -788,7 +790,7 @@ export default function Home() {
             setShowHint(false);
           }}
           style={{
-            padding: "6px 14px",
+            padding: "4px 12px",
             borderRadius: "16px",
             border: isEraser
               ? "2px solid #fff"
@@ -796,7 +798,7 @@ export default function Home() {
             background: "transparent",
             color: "#F4F1EA",
             cursor: "pointer",
-            fontSize: "13px",
+            fontSize: "12px",
           }}
         >
           지우개 (0)
@@ -804,13 +806,13 @@ export default function Home() {
         <button
           onClick={handleClearAll}
           style={{
-            padding: "6px 14px",
+            padding: "4px 12px",
             borderRadius: "16px",
             border: "2px solid rgba(255,255,255,0.2)",
             background: "transparent",
             color: "#F4F1EA",
             cursor: "pointer",
-            fontSize: "13px",
+            fontSize: "12px",
           }}
         >
           전체 지우기
@@ -819,9 +821,9 @@ export default function Home() {
 
       <div
         style={{
-          marginTop: "12px",
+          marginTop: "8px",
           display: "flex",
-          gap: "8px",
+          gap: "6px",
           alignItems: "center",
           flexWrap: "wrap",
           justifyContent: "center",
@@ -911,9 +913,9 @@ export default function Home() {
       {/* 배경 블러 / 카메라 숨기기 토글 */}
       <div
         style={{
-          marginTop: "12px",
+          marginTop: "8px",
           display: "flex",
-          gap: "8px",
+          gap: "6px",
           alignItems: "center",
           flexWrap: "wrap",
           justifyContent: "center",
@@ -959,8 +961,8 @@ export default function Home() {
 
       <p
         style={{
-          marginTop: "16px",
-          fontSize: "13px",
+          marginTop: "8px",
+          fontSize: "12px",
           color: "rgba(244,241,234,0.6)",
         }}
       >
