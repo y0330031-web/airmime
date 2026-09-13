@@ -87,6 +87,12 @@ export default function Home() {
   const [bgBlurOn, setBgBlurOn] = useState(false);
   const [cameraHidden, setCameraHidden] = useState(false);
 
+  // 사용자 신고 기능
+  const [showReportForm, setShowReportForm] = useState(false);
+  const [reportText, setReportText] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportDone, setReportDone] = useState(false);
+
   // 블러 강도 (얼굴 블러 + 배경 블러 공통 적용)
   const BLUR_LEVELS = [30, 50, 70, 100] as const;
   const [blurStrength, setBlurStrength] = useState<number>(50);
@@ -251,6 +257,26 @@ export default function Home() {
       await set(ref(db, `rooms/${code}/clearSignal`), Date.now());
     } catch (err) {
       console.error("clear sync failed:", err);
+    }
+  };
+
+  const handleSubmitReport = async () => {
+    const code = roomCodeRef.current;
+    if (!code || !reportText.trim()) return;
+    setReportSubmitting(true);
+    try {
+      await push(ref(db, `rooms/${code}/reports`), {
+        reason: reportText.trim(),
+        reportedAt: Date.now(),
+      });
+      setReportText("");
+      setShowReportForm(false);
+      setReportDone(true);
+      setTimeout(() => setReportDone(false), 3000);
+    } catch (err) {
+      console.error("report submit failed:", err);
+    } finally {
+      setReportSubmitting(false);
     }
   };
 
@@ -634,6 +660,19 @@ export default function Home() {
             방 코드 {roomCode}
           </span>
           <button
+            onClick={() => setShowReportForm((prev) => !prev)}
+            style={{
+              fontSize: "12px",
+              color: "rgba(244,241,234,0.6)",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              textDecoration: "underline",
+            }}
+          >
+            신고
+          </button>
+          <button
             onClick={handleLeaveRoom}
             style={{
               fontSize: "12px",
@@ -648,6 +687,84 @@ export default function Home() {
           </button>
         </div>
       </div>
+
+      {showReportForm && (
+        <div
+          style={{
+            width: "min(90vw, 1000px, 82vh)",
+            marginBottom: "8px",
+            padding: "10px 12px",
+            borderRadius: "10px",
+            border: "1px solid rgba(255,255,255,0.15)",
+            display: "flex",
+            gap: "8px",
+            alignItems: "center",
+          }}
+        >
+          <input
+            value={reportText}
+            onChange={(e) => setReportText(e.target.value)}
+            placeholder="신고 사유를 적어주세요"
+            style={{
+              flex: 1,
+              padding: "8px 10px",
+              borderRadius: "8px",
+              border: "1px solid rgba(255,255,255,0.2)",
+              background: "transparent",
+              color: "#F4F1EA",
+              fontSize: "13px",
+            }}
+          />
+          <button
+            onClick={handleSubmitReport}
+            disabled={reportSubmitting || !reportText.trim()}
+            style={{
+              padding: "8px 14px",
+              borderRadius: "8px",
+              border: "none",
+              background: "#FF6B6B",
+              color: "#1B1A18",
+              fontWeight: 600,
+              fontSize: "13px",
+              cursor: reportSubmitting ? "default" : "pointer",
+              opacity: reportSubmitting || !reportText.trim() ? 0.6 : 1,
+            }}
+          >
+            제출
+          </button>
+          <button
+            onClick={() => {
+              setShowReportForm(false);
+              setReportText("");
+            }}
+            style={{
+              padding: "8px 12px",
+              borderRadius: "8px",
+              border: "1px solid rgba(255,255,255,0.2)",
+              background: "transparent",
+              color: "#F4F1EA",
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            취소
+          </button>
+        </div>
+      )}
+
+      {reportDone && (
+        <div
+          style={{
+            width: "min(90vw, 1000px, 82vh)",
+            marginBottom: "8px",
+            fontSize: "12px",
+            color: "#69DB7C",
+            textAlign: "center",
+          }}
+        >
+          신고가 접수됐어요.
+        </div>
+      )}
 
       <div
         style={{
