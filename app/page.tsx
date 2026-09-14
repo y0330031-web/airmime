@@ -60,6 +60,7 @@ export default function Home() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const drawCanvasRef = useRef<HTMLCanvasElement>(null);
+  const practiceCanvasRef = useRef<HTMLCanvasElement>(null);
   const faceCanvasRef = useRef<HTMLCanvasElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
@@ -92,6 +93,13 @@ export default function Home() {
   const [reportText, setReportText] = useState("");
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportDone, setReportDone] = useState(false);
+
+  // 연습 모드: 방에 들어가면 기본은 연습(나만 보임), '게임 시작' 누르면 공유 캔버스로 전환
+  const [practiceMode, setPracticeMode] = useState(true);
+  const practiceModeRef = useRef(true);
+  useEffect(() => {
+    practiceModeRef.current = practiceMode;
+  }, [practiceMode]);
 
   // 블러 강도 (얼굴 블러 + 배경 블러 공통 적용)
   const BLUR_LEVELS = [30, 50, 70, 100] as const;
@@ -178,7 +186,28 @@ export default function Home() {
     setJoinInput("");
     lastPointRef.current = null;
     clearSignalSeenRef.current = null;
+    setPracticeMode(true);
     const canvas = drawCanvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const pCanvas = practiceCanvasRef.current;
+    const pCtx = pCanvas?.getContext("2d");
+    if (pCanvas && pCtx) pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+  };
+
+  const handleStartGame = () => {
+    setPracticeMode(false);
+    setShowHint(false);
+    lastPointRef.current = null;
+  };
+
+  const handleBackToPractice = () => {
+    setPracticeMode(true);
+    lastPointRef.current = null;
+  };
+
+  const handleClearPractice = () => {
+    const canvas = practiceCanvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
   };
@@ -307,9 +336,11 @@ export default function Home() {
 
   const onHandsResults = useCallback(
     (results: any) => {
-      const canvas = drawCanvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
+      const targetCanvas = practiceModeRef.current
+        ? practiceCanvasRef.current
+        : drawCanvasRef.current;
+      if (!targetCanvas) return;
+      const ctx = targetCanvas.getContext("2d");
       if (!ctx) return;
 
       if (
@@ -319,8 +350,8 @@ export default function Home() {
         const landmarks = results.multiHandLandmarks[0];
         const indexTip = landmarks[8];
 
-        const x = (1 - indexTip.x) * canvas.width;
-        const y = indexTip.y * canvas.height;
+        const x = (1 - indexTip.x) * targetCanvas.width;
+        const y = indexTip.y * targetCanvas.height;
 
         if (isPenDownRef.current) {
           ctx.lineCap = "round";
@@ -341,14 +372,17 @@ export default function Home() {
             ctx.lineTo(x, y);
             ctx.stroke();
 
-            sendSegment({
-              x1: lastPointRef.current.x / canvas.width,
-              y1: lastPointRef.current.y / canvas.height,
-              x2: x / canvas.width,
-              y2: y / canvas.height,
-              color: colorRef.current,
-              eraser: isEraserRef.current,
-            });
+            // 연습 모드일 땐 상대방에게 전송하지 않음
+            if (!practiceModeRef.current) {
+              sendSegment({
+                x1: lastPointRef.current.x / targetCanvas.width,
+                y1: lastPointRef.current.y / targetCanvas.height,
+                x2: x / targetCanvas.width,
+                y2: y / targetCanvas.height,
+                color: colorRef.current,
+                eraser: isEraserRef.current,
+              });
+            }
           }
           lastPointRef.current = { x, y };
         } else {
@@ -491,16 +525,20 @@ export default function Home() {
 
   useEffect(() => {
     const drawCanvas = drawCanvasRef.current;
+    const practiceCanvas = practiceCanvasRef.current;
     const faceCanvas = faceCanvasRef.current;
     const bgCanvas = bgCanvasRef.current;
     const video = videoRef.current;
-    if (!drawCanvas || !faceCanvas || !bgCanvas || !video) return;
+    if (!drawCanvas || !practiceCanvas || !faceCanvas || !bgCanvas || !video)
+      return;
 
     const resize = () => {
       const w = video.videoWidth || 1280;
       const h = video.videoHeight || 720;
       drawCanvas.width = w;
       drawCanvas.height = h;
+      practiceCanvas.width = w;
+      practiceCanvas.height = h;
       faceCanvas.width = w;
       faceCanvas.height = h;
       bgCanvas.width = w;
@@ -704,6 +742,87 @@ export default function Home() {
         🔒 상대방에게 내 카메라 화면은 보이지 않아요 — 그린 그림만 공유돼요
       </div>
 
+      {/* 연습 모드 / 게임 시작 안내 */}
+      <div
+        style={{
+          width: "min(90vw, 1000px, 82vh)",
+          marginBottom: "8px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "10px",
+        }}
+      >
+        {practiceMode ? (
+          <>
+            <span
+              style={{
+                fontSize: "13px",
+                color: "#FFD43B",
+                fontWeight: 600,
+              }}
+            >
+              ✏️ 연습 중 (나만 보여요, 상대방에게 공유 안 됨)
+            </span>
+            <button
+              onClick={handleClearPractice}
+              style={{
+                padding: "4px 10px",
+                borderRadius: "12px",
+                border: "1px solid rgba(255,255,255,0.2)",
+                background: "transparent",
+                color: "#F4F1EA",
+                fontSize: "12px",
+                cursor: "pointer",
+              }}
+            >
+              연습 지우기
+            </button>
+            <button
+              onClick={handleStartGame}
+              style={{
+                padding: "5px 16px",
+                borderRadius: "14px",
+                border: "none",
+                background: "#69DB7C",
+                color: "#1B1A18",
+                fontWeight: 700,
+                fontSize: "13px",
+                cursor: "pointer",
+              }}
+            >
+              게임 시작 ▶
+            </button>
+          </>
+        ) : (
+          <>
+            <span
+              style={{
+                fontSize: "13px",
+                color: "#69DB7C",
+                fontWeight: 600,
+              }}
+            >
+              🎮 게임 중 (그림이 상대방에게 실시간 공유돼요)
+            </span>
+            <button
+              onClick={handleBackToPractice}
+              style={{
+                padding: "4px 10px",
+                borderRadius: "12px",
+                border: "1px solid rgba(255,255,255,0.2)",
+                background: "transparent",
+                color: "#F4F1EA",
+                fontSize: "12px",
+                cursor: "pointer",
+              }}
+            >
+              연습으로 돌아가기
+            </button>
+          </>
+        )}
+      </div>
+
       {showReportForm && (
         <div
           style={{
@@ -837,7 +956,7 @@ export default function Home() {
           }}
         />
 
-        {/* 그림 레이어: 항상 보임 */}
+        {/* 그림 레이어(공유): 게임 모드일 때만 보임 */}
         <canvas
           ref={drawCanvasRef}
           style={{
@@ -845,6 +964,19 @@ export default function Home() {
             inset: 0,
             width: "100%",
             height: "100%",
+            opacity: practiceMode ? 0 : 1,
+          }}
+        />
+
+        {/* 연습 캔버스: 연습 모드일 때만 보임, 상대방에겐 절대 전송 안 됨 */}
+        <canvas
+          ref={practiceCanvasRef}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            opacity: practiceMode ? 1 : 0,
           }}
         />
 
