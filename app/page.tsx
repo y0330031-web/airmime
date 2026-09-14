@@ -688,6 +688,22 @@ export default function Home() {
         </div>
       </div>
 
+      <div
+        style={{
+          width: "min(90vw, 1000px, 82vh)",
+          marginBottom: "8px",
+          fontSize: "12px",
+          color: "rgba(244,241,234,0.55)",
+          textAlign: "center",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "6px",
+        }}
+      >
+        🔒 상대방에게 내 카메라 화면은 보이지 않아요 — 그린 그림만 공유돼요
+      </div>
+
       {showReportForm && (
         <div
           style={{
@@ -765,6 +781,18 @@ export default function Home() {
           신고가 접수됐어요.
         </div>
       )}
+
+      <div
+        style={{
+          width: "min(90vw, 1000px, 82vh)",
+          marginBottom: "8px",
+          fontSize: "11px",
+          color: "rgba(244,241,234,0.45)",
+          textAlign: "center",
+        }}
+      >
+        🔒 상대방에게는 내 얼굴/카메라 화면이 보이지 않아요. 그림만 실시간으로 공유돼요.
+      </div>
 
       <div
         style={{
