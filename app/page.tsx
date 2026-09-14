@@ -784,18 +784,6 @@ export default function Home() {
 
       <div
         style={{
-          width: "min(90vw, 1000px, 82vh)",
-          marginBottom: "8px",
-          fontSize: "11px",
-          color: "rgba(244,241,234,0.45)",
-          textAlign: "center",
-        }}
-      >
-        🔒 상대방에게는 내 얼굴/카메라 화면이 보이지 않아요. 그림만 실시간으로 공유돼요.
-      </div>
-
-      <div
-        style={{
           position: "relative",
           width: "min(90vw, 1000px, 82vh)",
           aspectRatio: "16 / 9",
