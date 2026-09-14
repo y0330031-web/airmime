@@ -33,6 +33,33 @@ const EMOJIS = ["🐱", "🐶", "🐼", "👽"];
 
 type FilterMode = "none" | "blur" | "mosaic" | "emoji";
 
+const WORD_LIST = [
+  "사과",
+  "고양이",
+  "강아지",
+  "자동차",
+  "우산",
+  "피자",
+  "케이크",
+  "비행기",
+  "축구공",
+  "안경",
+  "시계",
+  "기타",
+  "나무",
+  "구름",
+  "무지개",
+  "선물상자",
+  "로봇",
+  "왕관",
+  "물고기",
+  "집",
+];
+
+function pickRandomWord(): string {
+  return WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
+}
+
 interface Point {
   x: number;
   y: number;
@@ -101,6 +128,34 @@ export default function Home() {
     practiceModeRef.current = practiceMode;
   }, [practiceMode]);
 
+  // 이 브라우저 세션을 구분하는 익명 ID (누가 그림꾼인지 정할 때 사용)
+  const clientIdRef = useRef<string>(
+    Math.random().toString(36).slice(2) + Date.now().toString(36)
+  );
+  const playersRef = useRef<Record<string, boolean>>({});
+
+  // 게임 라운드 상태: 누가 그림꾼인지, 제시어가 뭔지
+  interface GameData {
+    drawerId: string;
+    prompt: string;
+  }
+  const [gameData, setGameData] = useState<GameData | null>(null);
+  const gameDataRef = useRef<GameData | null>(null);
+  useEffect(() => {
+    gameDataRef.current = gameData;
+  }, [gameData]);
+
+  const isDrawer = !!gameData && gameData.drawerId === clientIdRef.current;
+  const isDrawerRef = useRef(false);
+  useEffect(() => {
+    isDrawerRef.current = isDrawer;
+  }, [isDrawer]);
+
+  // 게임 시작 전 제시어 설정 UI 상태
+  const [showPromptSetup, setShowPromptSetup] = useState(false);
+  const [customPromptInput, setCustomPromptInput] = useState("");
+  const [startingGame, setStartingGame] = useState(false);
+
   // 블러 강도 (얼굴 블러 + 배경 블러 공통 적용)
   const BLUR_LEVELS = [30, 50, 70, 100] as const;
   const [blurStrength, setBlurStrength] = useState<number>(50);
@@ -146,6 +201,7 @@ export default function Home() {
     try {
       const code = generateRoomCode();
       await set(ref(db, `rooms/${code}/meta`), { createdAt: Date.now() });
+      await set(ref(db, `rooms/${code}/gameStarted`), false);
       setRoomCode(code);
       setView("room");
     } catch (err) {
@@ -187,6 +243,9 @@ export default function Home() {
     lastPointRef.current = null;
     clearSignalSeenRef.current = null;
     setPracticeMode(true);
+    setGameData(null);
+    setShowPromptSetup(false);
+    setCustomPromptInput("");
     const canvas = drawCanvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -195,15 +254,56 @@ export default function Home() {
     if (pCanvas && pCtx) pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
   };
 
-  const handleStartGame = () => {
-    setPracticeMode(false);
-    setShowHint(false);
-    lastPointRef.current = null;
+  // 참가자 목록 중 무작위로 한 명을 그림꾼으로 뽑음 (아무도 없으면 나 자신)
+  const pickRandomDrawer = (): string => {
+    const ids = Object.keys(playersRef.current);
+    if (ids.length === 0) return clientIdRef.current;
+    return ids[Math.floor(Math.random() * ids.length)];
   };
 
-  const handleBackToPractice = () => {
-    setPracticeMode(true);
+  const startRound = async (prompt: string) => {
+    const code = roomCodeRef.current;
+    if (!code) return;
+    setStartingGame(true);
+    try {
+      const drawerId = pickRandomDrawer();
+      await set(ref(db, `rooms/${code}/game`), { drawerId, prompt });
+      await set(ref(db, `rooms/${code}/gameStarted`), true);
+      setShowPromptSetup(false);
+      setCustomPromptInput("");
+      setShowHint(false);
+      lastPointRef.current = null;
+    } catch (err) {
+      console.error("start round sync failed:", err);
+    } finally {
+      setStartingGame(false);
+    }
+  };
+
+  const handleOpenPromptSetup = () => {
+    setShowPromptSetup(true);
+  };
+
+  const handleAutoPrompt = () => {
+    startRound(pickRandomWord());
+  };
+
+  const handleSubmitCustomPrompt = () => {
+    const word = customPromptInput.trim();
+    if (!word) return;
+    startRound(word);
+  };
+
+  const handleBackToPractice = async () => {
     lastPointRef.current = null;
+    const code = roomCodeRef.current;
+    if (!code) return;
+    try {
+      await set(ref(db, `rooms/${code}/gameStarted`), false);
+      await set(ref(db, `rooms/${code}/game`), null);
+    } catch (err) {
+      console.error("back to practice sync failed:", err);
+    }
   };
 
   const handleClearPractice = () => {
@@ -217,6 +317,13 @@ export default function Home() {
 
     const strokesRef = ref(db, `rooms/${roomCode}/strokes`);
     const clearRef = ref(db, `rooms/${roomCode}/clearSignal`);
+    const gameStateRef = ref(db, `rooms/${roomCode}/gameStarted`);
+    const gameDataFbRef = ref(db, `rooms/${roomCode}/game`);
+    const playersFbRef = ref(db, `rooms/${roomCode}/players`);
+    const myPlayerRef = ref(
+      db,
+      `rooms/${roomCode}/players/${clientIdRef.current}`
+    );
 
     const drawSegment = (seg: StrokeSegment) => {
       const canvas = drawCanvasRef.current;
@@ -261,9 +368,35 @@ export default function Home() {
       }
     });
 
+    // 게임 시작/연습 상태는 두 사람 모두 같은 값을 보도록 Firebase에서 직접 반영
+    onValue(gameStateRef, (snap) => {
+      const started = !!snap.val();
+      setPracticeMode(!started);
+      lastPointRef.current = null;
+    });
+
+    // 현재 라운드의 그림꾼/제시어
+    onValue(gameDataFbRef, (snap) => {
+      setGameData(snap.val());
+    });
+
+    // 방 참가자 목록 (그림꾼 무작위 선정에 사용)
+    onValue(playersFbRef, (snap) => {
+      playersRef.current = snap.val() || {};
+    });
+
+    // 내가 이 방에 참가 중임을 등록
+    set(myPlayerRef, true).catch((err) =>
+      console.error("player register failed:", err)
+    );
+
     return () => {
       off(strokesRef);
       off(clearRef);
+      off(gameStateRef);
+      off(gameDataFbRef);
+      off(playersFbRef);
+      remove(myPlayerRef).catch(() => {});
     };
   }, [view, roomCode]);
 
@@ -336,6 +469,12 @@ export default function Home() {
 
   const onHandsResults = useCallback(
     (results: any) => {
+      // 게임 모드(연습 아님)일 땐 그림꾼만 그릴 수 있음
+      if (!practiceModeRef.current && !isDrawerRef.current) {
+        lastPointRef.current = null;
+        return;
+      }
+
       const targetCanvas = practiceModeRef.current
         ? practiceCanvasRef.current
         : drawCanvasRef.current;
@@ -742,25 +881,28 @@ export default function Home() {
         🔒 상대방에게 내 카메라 화면은 보이지 않아요 — 그린 그림만 공유돼요
       </div>
 
-      {/* 연습 모드 / 게임 시작 안내 */}
+      {/* 연습 모드 / 제시어 설정 / 게임 진행 안내 */}
       <div
         style={{
           width: "min(90vw, 1000px, 82vh)",
           marginBottom: "8px",
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
-          justifyContent: "center",
-          gap: "10px",
+          gap: "6px",
         }}
       >
-        {practiceMode ? (
-          <>
+        {practiceMode && !showPromptSetup && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "10px",
+            }}
+          >
             <span
-              style={{
-                fontSize: "13px",
-                color: "#FFD43B",
-                fontWeight: 600,
-              }}
+              style={{ fontSize: "13px", color: "#FFD43B", fontWeight: 600 }}
             >
               ✏️ 연습 중 (나만 보여요, 상대방에게 공유 안 됨)
             </span>
@@ -779,7 +921,7 @@ export default function Home() {
               연습 지우기
             </button>
             <button
-              onClick={handleStartGame}
+              onClick={handleOpenPromptSetup}
               style={{
                 padding: "5px 16px",
                 borderRadius: "14px",
@@ -793,18 +935,133 @@ export default function Home() {
             >
               게임 시작 ▶
             </button>
-          </>
-        ) : (
-          <>
-            <span
+          </div>
+        )}
+
+        {practiceMode && showPromptSetup && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "8px",
+              padding: "10px 14px",
+              borderRadius: "10px",
+              border: "1px solid rgba(255,255,255,0.15)",
+              width: "100%",
+              maxWidth: "480px",
+            }}
+          >
+            <span style={{ fontSize: "13px", fontWeight: 600 }}>
+              제시어를 어떻게 정할까요?
+            </span>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+              <button
+                onClick={handleAutoPrompt}
+                disabled={startingGame}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "12px",
+                  border: "none",
+                  background: "#4DABF7",
+                  color: "#1B1A18",
+                  fontWeight: 600,
+                  fontSize: "13px",
+                  cursor: startingGame ? "default" : "pointer",
+                  opacity: startingGame ? 0.6 : 1,
+                }}
+              >
+                자동으로 받기
+              </button>
+              <span style={{ fontSize: "12px", color: "rgba(244,241,234,0.5)", alignSelf: "center" }}>
+                또는
+              </span>
+              <input
+                value={customPromptInput}
+                onChange={(e) => setCustomPromptInput(e.target.value)}
+                placeholder="직접 제시어 입력"
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: "10px",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  background: "transparent",
+                  color: "#F4F1EA",
+                  fontSize: "13px",
+                  width: "140px",
+                }}
+              />
+              <button
+                onClick={handleSubmitCustomPrompt}
+                disabled={startingGame || !customPromptInput.trim()}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "12px",
+                  border: "none",
+                  background: "#69DB7C",
+                  color: "#1B1A18",
+                  fontWeight: 600,
+                  fontSize: "13px",
+                  cursor: startingGame ? "default" : "pointer",
+                  opacity:
+                    startingGame || !customPromptInput.trim() ? 0.6 : 1,
+                }}
+              >
+                이 제시어로 시작
+              </button>
+            </div>
+            <button
+              onClick={() => setShowPromptSetup(false)}
               style={{
-                fontSize: "13px",
-                color: "#69DB7C",
-                fontWeight: 600,
+                fontSize: "12px",
+                color: "rgba(244,241,234,0.5)",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                textDecoration: "underline",
               }}
             >
-              🎮 게임 중 (그림이 상대방에게 실시간 공유돼요)
-            </span>
+              취소
+            </button>
+          </div>
+        )}
+
+        {!practiceMode && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "10px",
+              flexWrap: "wrap",
+            }}
+          >
+            {gameData && isDrawer && (
+              <span
+                style={{
+                  fontSize: "13px",
+                  color: "#69DB7C",
+                  fontWeight: 700,
+                }}
+              >
+                🎨 당신이 그림꾼! 제시어: {gameData.prompt}
+              </span>
+            )}
+            {gameData && !isDrawer && (
+              <span
+                style={{
+                  fontSize: "13px",
+                  color: "#FFD43B",
+                  fontWeight: 600,
+                }}
+              >
+                🤔 상대방이 그리는 중이에요! 맞혀보세요
+              </span>
+            )}
+            {!gameData && (
+              <span style={{ fontSize: "13px", color: "rgba(244,241,234,0.6)" }}>
+                🎮 게임 중
+              </span>
+            )}
             <button
               onClick={handleBackToPractice}
               style={{
@@ -819,7 +1076,7 @@ export default function Home() {
             >
               연습으로 돌아가기
             </button>
-          </>
+          </div>
         )}
       </div>
 
