@@ -12,6 +12,7 @@ import {
   get,
   remove,
   off,
+  onDisconnect,
 } from "firebase/database";
 import { useBackgroundBlur } from "@/hooks/useBackgroundBlur";
 
@@ -133,6 +134,7 @@ export default function Home() {
     Math.random().toString(36).slice(2) + Date.now().toString(36)
   );
   const playersRef = useRef<Record<string, boolean>>({});
+  const [playerCount, setPlayerCount] = useState(0);
 
   // 게임 라운드 상태: 누가 그림꾼인지, 제시어가 뭔지
   interface GameData {
@@ -155,6 +157,32 @@ export default function Home() {
   const [showPromptSetup, setShowPromptSetup] = useState(false);
   const [customPromptInput, setCustomPromptInput] = useState("");
   const [startingGame, setStartingGame] = useState(false);
+
+  // 라운드 타이머 / 점수 / 채팅(정답 맞히기)
+  const ROUND_SECONDS = 60;
+  const [roundStartedAt, setRoundStartedAt] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState(ROUND_SECONDS);
+  const [scores, setScores] = useState<Record<string, number>>({});
+  const [roundStatus, setRoundStatus] = useState<{
+    winnerId: string | null;
+    endedAt: number;
+  } | null>(null);
+  const roundStatusRef = useRef<typeof roundStatus>(null);
+  useEffect(() => {
+    roundStatusRef.current = roundStatus;
+  }, [roundStatus]);
+  const roundAdvanceTriggeredRef = useRef(false);
+
+  interface ChatMessage {
+    id: string;
+    senderId: string;
+    text: string;
+    correct: boolean;
+    ts: number;
+  }
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const chatListRef = useRef<HTMLDivElement>(null);
 
   // 블러 강도 (얼굴 블러 + 배경 블러 공통 적용)
   const BLUR_LEVELS = [30, 50, 70, 100] as const;
@@ -267,8 +295,12 @@ export default function Home() {
     setStartingGame(true);
     try {
       const drawerId = pickRandomDrawer();
+      const startedAt = Date.now();
       await set(ref(db, `rooms/${code}/game`), { drawerId, prompt });
       await set(ref(db, `rooms/${code}/gameStarted`), true);
+      await set(ref(db, `rooms/${code}/roundStartedAt`), startedAt);
+      await set(ref(db, `rooms/${code}/roundStatus`), null);
+      roundAdvanceTriggeredRef.current = false;
       setShowPromptSetup(false);
       setCustomPromptInput("");
       setShowHint(false);
@@ -301,6 +333,7 @@ export default function Home() {
     try {
       await set(ref(db, `rooms/${code}/gameStarted`), false);
       await set(ref(db, `rooms/${code}/game`), null);
+      await set(ref(db, `rooms/${code}/roundStatus`), null);
     } catch (err) {
       console.error("back to practice sync failed:", err);
     }
@@ -380,15 +413,47 @@ export default function Home() {
       setGameData(snap.val());
     });
 
-    // 방 참가자 목록 (그림꾼 무작위 선정에 사용)
-    onValue(playersFbRef, (snap) => {
-      playersRef.current = snap.val() || {};
+    const roundStartedAtRef = ref(db, `rooms/${roomCode}/roundStartedAt`);
+    const roundStatusFbRef = ref(db, `rooms/${roomCode}/roundStatus`);
+    const scoresFbRef = ref(db, `rooms/${roomCode}/scores`);
+    const chatFbRef = ref(db, `rooms/${roomCode}/chat`);
+
+    onValue(roundStartedAtRef, (snap) => {
+      setRoundStartedAt(snap.val() || null);
     });
 
-    // 내가 이 방에 참가 중임을 등록
+    onValue(roundStatusFbRef, (snap) => {
+      setRoundStatus(snap.val());
+    });
+
+    onValue(scoresFbRef, (snap) => {
+      setScores(snap.val() || {});
+    });
+
+    setChatMessages([]);
+    onChildAdded(chatFbRef, (snap) => {
+      const val = snap.val();
+      if (!val) return;
+      setChatMessages((prev) => [
+        ...prev,
+        { id: snap.key || String(Date.now()), ...val },
+      ]);
+    });
+
+    // 방 참가자 목록 (그림꾼 무작위 선정에 사용)
+    onValue(playersFbRef, (snap) => {
+      const val = snap.val() || {};
+      playersRef.current = val;
+      setPlayerCount(Object.keys(val).length);
+    });
+
+    // 내가 이 방에 참가 중임을 등록. 탭을 갑자기 닫아도 자동으로 제거되게 함
     set(myPlayerRef, true).catch((err) =>
       console.error("player register failed:", err)
     );
+    onDisconnect(myPlayerRef)
+      .remove()
+      .catch(() => {});
 
     return () => {
       off(strokesRef);
@@ -396,6 +461,10 @@ export default function Home() {
       off(gameStateRef);
       off(gameDataFbRef);
       off(playersFbRef);
+      off(roundStartedAtRef);
+      off(roundStatusFbRef);
+      off(scoresFbRef);
+      off(chatFbRef);
       remove(myPlayerRef).catch(() => {});
     };
   }, [view, roomCode]);
@@ -407,6 +476,94 @@ export default function Home() {
       console.error("stroke sync failed:", err)
     );
   }, []);
+
+  // 라운드 타이머 계산 (매 초)
+  useEffect(() => {
+    if (practiceMode || !roundStartedAt) {
+      setTimeLeft(ROUND_SECONDS);
+      return;
+    }
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - roundStartedAt) / 1000);
+      setTimeLeft(Math.max(0, ROUND_SECONDS - elapsed));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [practiceMode, roundStartedAt]);
+
+  // 시간 초과 시, 그림꾼 쪽에서만 다음 라운드로 자동 전환 (중복 방지)
+  useEffect(() => {
+    if (practiceMode) return;
+    if (timeLeft > 0) return;
+    if (!isDrawer) return;
+    if (roundStatus) return; // 이미 누군가 맞혀서 종료된 경우
+    if (roundAdvanceTriggeredRef.current) return;
+    roundAdvanceTriggeredRef.current = true;
+
+    const code = roomCodeRef.current;
+    if (!code) return;
+    set(ref(db, `rooms/${code}/roundStatus`), {
+      winnerId: null,
+      endedAt: Date.now(),
+    }).catch(() => {});
+
+    setTimeout(() => {
+      startRound(pickRandomWord());
+    }, 3000);
+  }, [timeLeft, practiceMode, isDrawer, roundStatus]);
+
+  // 채팅 메시지 리스트 자동 스크롤
+  useEffect(() => {
+    const el = chatListRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chatMessages]);
+
+  const handleSendChat = async () => {
+    const text = chatInput.trim();
+    if (!text) return;
+    const code = roomCodeRef.current;
+    if (!code) return;
+
+    const prompt = gameDataRef.current?.prompt;
+    const isCorrectGuess =
+      !practiceModeRef.current &&
+      !isDrawerRef.current &&
+      !!prompt &&
+      text === prompt &&
+      !roundStatusRef.current;
+
+    try {
+      await push(ref(db, `rooms/${code}/chat`), {
+        senderId: clientIdRef.current,
+        text,
+        correct: isCorrectGuess,
+        ts: Date.now(),
+      });
+      setChatInput("");
+
+      if (isCorrectGuess) {
+        const myScoreRef = ref(
+          db,
+          `rooms/${code}/scores/${clientIdRef.current}`
+        );
+        const snap = await get(myScoreRef);
+        const cur = snap.val() || 0;
+        await set(myScoreRef, cur + 1);
+
+        await set(ref(db, `rooms/${code}/roundStatus`), {
+          winnerId: clientIdRef.current,
+          endedAt: Date.now(),
+        });
+
+        setTimeout(() => {
+          startRound(pickRandomWord());
+        }, 3000);
+      }
+    } catch (err) {
+      console.error("chat send failed:", err);
+    }
+  };
 
   const handleClearAll = async () => {
     const code = roomCodeRef.current;
@@ -836,6 +993,17 @@ export default function Home() {
           >
             방 코드 {roomCode}
           </span>
+          <span
+            style={{
+              fontSize: "12px",
+              color: playerCount >= 2 ? "#69DB7C" : "rgba(244,241,234,0.6)",
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            👥 {playerCount}명 접속 중
+          </span>
           <button
             onClick={() => setShowReportForm((prev) => !prev)}
             style={{
@@ -1029,53 +1197,112 @@ export default function Home() {
           <div
             style={{
               display: "flex",
+              flexDirection: "column",
               alignItems: "center",
-              justifyContent: "center",
-              gap: "10px",
-              flexWrap: "wrap",
+              gap: "4px",
+              width: "100%",
             }}
           >
-            {gameData && isDrawer && (
-              <span
-                style={{
-                  fontSize: "13px",
-                  color: "#69DB7C",
-                  fontWeight: 700,
-                }}
-              >
-                🎨 당신이 그림꾼! 제시어: {gameData.prompt}
-              </span>
-            )}
-            {gameData && !isDrawer && (
-              <span
-                style={{
-                  fontSize: "13px",
-                  color: "#FFD43B",
-                  fontWeight: 600,
-                }}
-              >
-                🤔 상대방이 그리는 중이에요! 맞혀보세요
-              </span>
-            )}
-            {!gameData && (
-              <span style={{ fontSize: "13px", color: "rgba(244,241,234,0.6)" }}>
-                🎮 게임 중
-              </span>
-            )}
-            <button
-              onClick={handleBackToPractice}
+            <div
               style={{
-                padding: "4px 10px",
-                borderRadius: "12px",
-                border: "1px solid rgba(255,255,255,0.2)",
-                background: "transparent",
-                color: "#F4F1EA",
-                fontSize: "12px",
-                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "14px",
               }}
             >
-              연습으로 돌아가기
-            </button>
+              <span
+                style={{
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  color: timeLeft <= 10 ? "#FF6B6B" : "#F4F1EA",
+                }}
+              >
+                ⏱ {timeLeft}초
+              </span>
+              <span style={{ fontSize: "13px", color: "#F4F1EA" }}>
+                🏆 나 {scores[clientIdRef.current] || 0} : {" "}
+                {Object.entries(scores)
+                  .filter(([id]) => id !== clientIdRef.current)
+                  .reduce((sum, [, v]) => sum + v, 0)}{" "}
+                상대
+              </span>
+            </div>
+
+            {roundStatus && (
+              <span
+                style={{
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  color:
+                    roundStatus.winnerId === clientIdRef.current
+                      ? "#69DB7C"
+                      : roundStatus.winnerId
+                      ? "#FF6B6B"
+                      : "#FFD43B",
+                }}
+              >
+                {roundStatus.winnerId === null
+                  ? `⏰ 시간 초과! 정답은 "${gameData?.prompt ?? ""}" 였어요`
+                  : roundStatus.winnerId === clientIdRef.current
+                  ? "🎉 정답! 다음 라운드 준비 중..."
+                  : "😢 상대방이 먼저 맞혔어요. 다음 라운드 준비 중..."}
+              </span>
+            )}
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "10px",
+                flexWrap: "wrap",
+              }}
+            >
+              {gameData && isDrawer && (
+                <span
+                  style={{
+                    fontSize: "13px",
+                    color: "#69DB7C",
+                    fontWeight: 700,
+                  }}
+                >
+                  🎨 당신이 그림꾼! 제시어: {gameData.prompt}
+                </span>
+              )}
+              {gameData && !isDrawer && (
+                <span
+                  style={{
+                    fontSize: "13px",
+                    color: "#FFD43B",
+                    fontWeight: 600,
+                  }}
+                >
+                  🤔 상대방이 그리는 중이에요! 채팅에 정답을 입력해보세요
+                </span>
+              )}
+              {!gameData && (
+                <span
+                  style={{ fontSize: "13px", color: "rgba(244,241,234,0.6)" }}
+                >
+                  🎮 게임 중
+                </span>
+              )}
+              <button
+                onClick={handleBackToPractice}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  background: "transparent",
+                  color: "#F4F1EA",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                }}
+              >
+                연습으로 돌아가기
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1480,6 +1707,100 @@ export default function Home() {
           {cameraHidden ? "카메라 보이기" : "카메라 숨기고 그림만 보기"}
         </button>
       </div>
+
+      {!practiceMode && (
+        <div
+          style={{
+            width: "min(90vw, 1000px, 82vh)",
+            marginTop: "8px",
+            display: "flex",
+            flexDirection: "column",
+            border: "1px solid rgba(255,255,255,0.15)",
+            borderRadius: "10px",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            ref={chatListRef}
+            style={{
+              height: "70px",
+              overflowY: "auto",
+              padding: "6px 10px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "3px",
+            }}
+          >
+            {chatMessages.length === 0 && (
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "rgba(244,241,234,0.4)",
+                }}
+              >
+                여기에 정답을 입력해보세요
+              </span>
+            )}
+            {chatMessages.map((m) => (
+              <span
+                key={m.id}
+                style={{
+                  fontSize: "12px",
+                  color: m.correct
+                    ? "#69DB7C"
+                    : m.senderId === clientIdRef.current
+                    ? "#F4F1EA"
+                    : "rgba(244,241,234,0.7)",
+                  fontWeight: m.correct ? 700 : 400,
+                }}
+              >
+                {m.senderId === clientIdRef.current ? "나" : "상대"}:{" "}
+                {m.correct ? "🎉 정답!" : m.text}
+              </span>
+            ))}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              borderTop: "1px solid rgba(255,255,255,0.1)",
+            }}
+          >
+            <input
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleSendChat();
+                }
+              }}
+              placeholder={isDrawer ? "채팅 보내기" : "정답을 입력하세요"}
+              style={{
+                flex: 1,
+                padding: "6px 10px",
+                border: "none",
+                background: "transparent",
+                color: "#F4F1EA",
+                fontSize: "12px",
+                outline: "none",
+              }}
+            />
+            <button
+              onClick={handleSendChat}
+              style={{
+                padding: "6px 14px",
+                border: "none",
+                background: "rgba(255,255,255,0.08)",
+                color: "#F4F1EA",
+                fontSize: "12px",
+                cursor: "pointer",
+              }}
+            >
+              전송
+            </button>
+          </div>
+        </div>
+      )}
 
       <p
         style={{
