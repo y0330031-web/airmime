@@ -135,6 +135,8 @@ export default function Home() {
   );
   const playersRef = useRef<Record<string, boolean>>({});
   const [playerCount, setPlayerCount] = useState(0);
+  const [hostId, setHostId] = useState<string | null>(null);
+  const isHost = hostId === clientIdRef.current;
 
   // 게임 라운드 상태: 누가 그림꾼인지, 제시어가 뭔지
   interface GameData {
@@ -228,7 +230,10 @@ export default function Home() {
     setRoomError(null);
     try {
       const code = generateRoomCode();
-      await set(ref(db, `rooms/${code}/meta`), { createdAt: Date.now() });
+      await set(ref(db, `rooms/${code}/meta`), {
+        createdAt: Date.now(),
+        hostId: clientIdRef.current,
+      });
       await set(ref(db, `rooms/${code}/gameStarted`), false);
       setRoomCode(code);
       setView("room");
@@ -272,6 +277,7 @@ export default function Home() {
     clearSignalSeenRef.current = null;
     setPracticeMode(true);
     setGameData(null);
+    setHostId(null);
     setShowPromptSetup(false);
     setCustomPromptInput("");
     const canvas = drawCanvasRef.current;
@@ -353,10 +359,16 @@ export default function Home() {
     const gameStateRef = ref(db, `rooms/${roomCode}/gameStarted`);
     const gameDataFbRef = ref(db, `rooms/${roomCode}/game`);
     const playersFbRef = ref(db, `rooms/${roomCode}/players`);
+    const metaFbRef = ref(db, `rooms/${roomCode}/meta`);
     const myPlayerRef = ref(
       db,
       `rooms/${roomCode}/players/${clientIdRef.current}`
     );
+
+    onValue(metaFbRef, (snap) => {
+      const val = snap.val();
+      setHostId(val?.hostId || null);
+    });
 
     const drawSegment = (seg: StrokeSegment) => {
       const canvas = drawCanvasRef.current;
@@ -461,6 +473,7 @@ export default function Home() {
       off(gameStateRef);
       off(gameDataFbRef);
       off(playersFbRef);
+      off(metaFbRef);
       off(roundStartedAtRef);
       off(roundStatusFbRef);
       off(scoresFbRef);
@@ -992,6 +1005,7 @@ export default function Home() {
             }}
           >
             방 코드 {roomCode}
+            {isHost && " 👑"}
           </span>
           <span
             style={{
@@ -1088,25 +1102,36 @@ export default function Home() {
             >
               연습 지우기
             </button>
-            <button
-              onClick={handleOpenPromptSetup}
-              style={{
-                padding: "5px 16px",
-                borderRadius: "14px",
-                border: "none",
-                background: "#69DB7C",
-                color: "#1B1A18",
-                fontWeight: 700,
-                fontSize: "13px",
-                cursor: "pointer",
-              }}
-            >
-              게임 시작 ▶
-            </button>
+            {isHost ? (
+              <button
+                onClick={handleOpenPromptSetup}
+                style={{
+                  padding: "5px 16px",
+                  borderRadius: "14px",
+                  border: "none",
+                  background: "#69DB7C",
+                  color: "#1B1A18",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                게임 시작 ▶
+              </button>
+            ) : (
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "rgba(244,241,234,0.45)",
+                }}
+              >
+                방장이 게임을 시작하면 알려드릴게요
+              </span>
+            )}
           </div>
         )}
 
-        {practiceMode && showPromptSetup && (
+        {practiceMode && showPromptSetup && isHost && (
           <div
             style={{
               display: "flex",
@@ -1288,20 +1313,22 @@ export default function Home() {
                   🎮 게임 중
                 </span>
               )}
-              <button
-                onClick={handleBackToPractice}
-                style={{
-                  padding: "4px 10px",
-                  borderRadius: "12px",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  background: "transparent",
-                  color: "#F4F1EA",
-                  fontSize: "12px",
-                  cursor: "pointer",
-                }}
-              >
-                연습으로 돌아가기
-              </button>
+              {isHost && (
+                <button
+                  onClick={handleBackToPractice}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: "12px",
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    background: "transparent",
+                    color: "#F4F1EA",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                  }}
+                >
+                  연습으로 돌아가기
+                </button>
+              )}
             </div>
           </div>
         )}
