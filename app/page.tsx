@@ -32,6 +32,17 @@ const COLORS = [
 
 const EMOJIS = ["🐱", "🐶", "🐼", "👽"];
 
+// 참가자 아바타로 쓸 이모지 팔레트 (필터용 EMOJIS와는 별개)
+const PLAYER_EMOJIS = ["🦊", "🐰", "🐻", "🐹", "🦁", "🐨", "🐷", "🐵"];
+
+function emojiForClientId(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  }
+  return PLAYER_EMOJIS[hash % PLAYER_EMOJIS.length];
+}
+
 type FilterMode = "none" | "blur" | "mosaic" | "emoji";
 
 const WORD_LIST = [
@@ -73,6 +84,12 @@ interface StrokeSegment {
   y2: number;
   color: string;
   eraser: boolean;
+}
+
+interface PlayerInfo {
+  id: string;
+  emoji: string;
+  joinedAt: number;
 }
 
 function generateRoomCode(): string {
@@ -133,8 +150,9 @@ export default function Home() {
   const clientIdRef = useRef<string>(
     Math.random().toString(36).slice(2) + Date.now().toString(36)
   );
-  const playersRef = useRef<Record<string, boolean>>({});
+  const playersRef = useRef<Record<string, any>>({});
   const [playerCount, setPlayerCount] = useState(0);
+  const [playersList, setPlayersList] = useState<PlayerInfo[]>([]);
   const [hostId, setHostId] = useState<string | null>(null);
   const isHost = hostId === clientIdRef.current;
 
@@ -278,6 +296,7 @@ export default function Home() {
     setPracticeMode(true);
     setGameData(null);
     setHostId(null);
+    setPlayersList([]);
     setShowPromptSetup(false);
     setCustomPromptInput("");
     const canvas = drawCanvasRef.current;
@@ -452,17 +471,33 @@ export default function Home() {
       ]);
     });
 
-    // 방 참가자 목록 (그림꾼 무작위 선정에 사용)
+    // 방 참가자 목록 (그림꾼 무작위 선정 + 참가자 패널 표시에 사용)
     onValue(playersFbRef, (snap) => {
       const val = snap.val() || {};
       playersRef.current = val;
       setPlayerCount(Object.keys(val).length);
+
+      const list: PlayerInfo[] = Object.entries(val).map(([id, data]) => {
+        const d = data as any;
+        const emoji =
+          d && typeof d === "object" && typeof d.emoji === "string"
+            ? d.emoji
+            : emojiForClientId(id);
+        const joinedAt =
+          d && typeof d === "object" && typeof d.joinedAt === "number"
+            ? d.joinedAt
+            : 0;
+        return { id, emoji, joinedAt };
+      });
+      list.sort((a, b) => a.joinedAt - b.joinedAt);
+      setPlayersList(list);
     });
 
     // 내가 이 방에 참가 중임을 등록. 탭을 갑자기 닫아도 자동으로 제거되게 함
-    set(myPlayerRef, true).catch((err) =>
-      console.error("player register failed:", err)
-    );
+    set(myPlayerRef, {
+      joinedAt: Date.now(),
+      emoji: emojiForClientId(clientIdRef.current),
+    }).catch((err) => console.error("player register failed:", err));
     onDisconnect(myPlayerRef)
       .remove()
       .catch(() => {});
@@ -1007,17 +1042,6 @@ export default function Home() {
             방 코드 {roomCode}
             {isHost && " 👑"}
           </span>
-          <span
-            style={{
-              fontSize: "12px",
-              color: playerCount >= 2 ? "#69DB7C" : "rgba(244,241,234,0.6)",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-            }}
-          >
-            👥 {playerCount}명 접속 중
-          </span>
           <button
             onClick={() => setShowReportForm((prev) => !prev)}
             style={{
@@ -1045,6 +1069,62 @@ export default function Home() {
             나가기
           </button>
         </div>
+      </div>
+
+      {/* 참가자 패널: 아바타 이모지 + 나/상대 + 방장 왕관 */}
+      <div
+        style={{
+          width: "min(90vw, 1000px, 82vh)",
+          display: "flex",
+          gap: "6px",
+          alignItems: "center",
+          justifyContent: "center",
+          flexWrap: "wrap",
+          marginBottom: "8px",
+        }}
+      >
+        {playersList.map((p, idx) => {
+          const isMe = p.id === clientIdRef.current;
+          const isPlayerHost = p.id === hostId;
+          const opponentIndex =
+            playersList
+              .filter((x) => x.id !== clientIdRef.current)
+              .findIndex((x) => x.id === p.id) + 1;
+          return (
+            <div
+              key={p.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "3px 10px",
+                borderRadius: "14px",
+                border: isMe
+                  ? "1px solid rgba(255,255,255,0.55)"
+                  : "1px solid rgba(255,255,255,0.15)",
+                background: isMe ? "rgba(255,255,255,0.08)" : "transparent",
+                fontSize: "12px",
+              }}
+            >
+              <span style={{ fontSize: "15px", lineHeight: 1 }}>
+                {p.emoji}
+              </span>
+              <span style={{ color: "rgba(244,241,234,0.85)" }}>
+                {isMe ? "나" : `상대${playerCount > 2 ? opponentIndex : ""}`}
+              </span>
+              {isPlayerHost && <span title="방장">👑</span>}
+            </div>
+          );
+        })}
+        <span
+          style={{
+            fontSize: "12px",
+            color: playerCount >= 2 ? "#69DB7C" : "rgba(244,241,234,0.5)",
+            marginLeft: "4px",
+          }}
+        >
+          👥 {playerCount}명 접속 중
+        </span>
       </div>
 
       <div
