@@ -151,6 +151,7 @@ export default function Home() {
     Math.random().toString(36).slice(2) + Date.now().toString(36)
   );
   const playersRef = useRef<Record<string, any>>({});
+  const playerInfoRef = useRef<Record<string, { joinedAt: number; emoji: string }>>({});
   const [playerCount, setPlayerCount] = useState(0);
   const [playersList, setPlayersList] = useState<PlayerInfo[]>([]);
   const [hostId, setHostId] = useState<string | null>(null);
@@ -378,10 +379,15 @@ export default function Home() {
     const gameStateRef = ref(db, `rooms/${roomCode}/gameStarted`);
     const gameDataFbRef = ref(db, `rooms/${roomCode}/game`);
     const playersFbRef = ref(db, `rooms/${roomCode}/players`);
+    const playerInfoFbRef = ref(db, `rooms/${roomCode}/playerInfo`);
     const metaFbRef = ref(db, `rooms/${roomCode}/meta`);
     const myPlayerRef = ref(
       db,
       `rooms/${roomCode}/players/${clientIdRef.current}`
+    );
+    const myPlayerInfoRef = ref(
+      db,
+      `rooms/${roomCode}/playerInfo/${clientIdRef.current}`
     );
 
     onValue(metaFbRef, (snap) => {
@@ -472,33 +478,48 @@ export default function Home() {
     });
 
     // 방 참가자 목록 (그림꾼 무작위 선정 + 참가자 패널 표시에 사용)
+    // players: 기존 방식 그대로 boolean 값 (기존 보안 규칙과 호환)
+    // playerInfo: 아바타 이모지 / 입장 시각 같은 부가 정보 (별도 경로라 players 규칙에 영향 없음)
+    const recomputePlayersList = () => {
+      const ids = Object.keys(playersRef.current);
+      const list: PlayerInfo[] = ids.map((id) => {
+        const info = playerInfoRef.current[id];
+        return {
+          id,
+          emoji: info?.emoji || emojiForClientId(id),
+          joinedAt: info?.joinedAt ?? 0,
+        };
+      });
+      list.sort((a, b) => a.joinedAt - b.joinedAt);
+      setPlayersList(list);
+    };
+
     onValue(playersFbRef, (snap) => {
       const val = snap.val() || {};
       playersRef.current = val;
       setPlayerCount(Object.keys(val).length);
+      recomputePlayersList();
+    });
 
-      const list: PlayerInfo[] = Object.entries(val).map(([id, data]) => {
-        const d = data as any;
-        const emoji =
-          d && typeof d === "object" && typeof d.emoji === "string"
-            ? d.emoji
-            : emojiForClientId(id);
-        const joinedAt =
-          d && typeof d === "object" && typeof d.joinedAt === "number"
-            ? d.joinedAt
-            : 0;
-        return { id, emoji, joinedAt };
-      });
-      list.sort((a, b) => a.joinedAt - b.joinedAt);
-      setPlayersList(list);
+    onValue(playerInfoFbRef, (snap) => {
+      playerInfoRef.current = snap.val() || {};
+      recomputePlayersList();
     });
 
     // 내가 이 방에 참가 중임을 등록. 탭을 갑자기 닫아도 자동으로 제거되게 함
-    set(myPlayerRef, {
+    set(myPlayerRef, true).catch((err) =>
+      console.error("player register failed (players):", err)
+    );
+    set(myPlayerInfoRef, {
       joinedAt: Date.now(),
       emoji: emojiForClientId(clientIdRef.current),
-    }).catch((err) => console.error("player register failed:", err));
+    }).catch((err) =>
+      console.error("player register failed (playerInfo):", err)
+    );
     onDisconnect(myPlayerRef)
+      .remove()
+      .catch(() => {});
+    onDisconnect(myPlayerInfoRef)
       .remove()
       .catch(() => {});
 
@@ -508,12 +529,14 @@ export default function Home() {
       off(gameStateRef);
       off(gameDataFbRef);
       off(playersFbRef);
+      off(playerInfoFbRef);
       off(metaFbRef);
       off(roundStartedAtRef);
       off(roundStatusFbRef);
       off(scoresFbRef);
       off(chatFbRef);
       remove(myPlayerRef).catch(() => {});
+      remove(myPlayerInfoRef).catch(() => {});
     };
   }, [view, roomCode]);
 
