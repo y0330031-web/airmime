@@ -34,6 +34,17 @@ const EMOJIS = ["🐱", "🐶", "🐼", "👽"];
 
 // 참가자 아바타로 쓸 이모지 팔레트 (필터용 EMOJIS와는 별개)
 const PLAYER_EMOJIS = ["🦊", "🐰", "🐻", "🐹", "🦁", "🐨", "🐷", "🐵"];
+// 아바타 원 배경색 팔레트 (그리기용 COLORS와는 별개, 살짝 톤 다운된 색)
+const AVATAR_BG_COLORS = [
+  "#FF6B6B",
+  "#FFA94D",
+  "#FFD43B",
+  "#69DB7C",
+  "#38D9A9",
+  "#4DABF7",
+  "#9775FA",
+  "#F783AC",
+];
 
 function emojiForClientId(id: string): string {
   let hash = 0;
@@ -41,6 +52,14 @@ function emojiForClientId(id: string): string {
     hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
   }
   return PLAYER_EMOJIS[hash % PLAYER_EMOJIS.length];
+}
+
+function avatarColorForClientId(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 17 + id.charCodeAt(i)) >>> 0;
+  }
+  return AVATAR_BG_COLORS[hash % AVATAR_BG_COLORS.length];
 }
 
 type FilterMode = "none" | "blur" | "mosaic" | "emoji";
@@ -1102,60 +1121,166 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 참가자 패널: 아바타 이모지 + 나/상대 + 방장 왕관 */}
+      {/* 참가자 패널: 캐치마인드 스타일 스코어보드 (아바타 + 이름 + 점수, 그림꾼/방장 표시) */}
       <div
         style={{
           width: "min(90vw, 1000px, 82vh)",
           display: "flex",
-          gap: "6px",
+          flexDirection: "column",
           alignItems: "center",
-          justifyContent: "center",
-          flexWrap: "wrap",
+          gap: "6px",
           marginBottom: "8px",
+          padding: "10px 16px",
+          borderRadius: "14px",
+          border: "1px solid rgba(255,255,255,0.12)",
+          background: "rgba(255,255,255,0.03)",
         }}
       >
-        {playersList.map((p, idx) => {
-          const isMe = p.id === clientIdRef.current;
-          const isPlayerHost = p.id === hostId;
-          const opponentIndex =
-            playersList
-              .filter((x) => x.id !== clientIdRef.current)
-              .findIndex((x) => x.id === p.id) + 1;
-          return (
-            <div
-              key={p.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                padding: "3px 10px",
-                borderRadius: "14px",
-                border: isMe
-                  ? "1px solid rgba(255,255,255,0.55)"
-                  : "1px solid rgba(255,255,255,0.15)",
-                background: isMe ? "rgba(255,255,255,0.08)" : "transparent",
-                fontSize: "12px",
-              }}
-            >
-              <span style={{ fontSize: "15px", lineHeight: 1 }}>
-                {p.emoji}
-              </span>
-              <span style={{ color: "rgba(244,241,234,0.85)" }}>
-                {isMe ? "나" : `상대${playerCount > 2 ? opponentIndex : ""}`}
-              </span>
-              {isPlayerHost && <span title="방장">👑</span>}
-            </div>
-          );
-        })}
-        <span
+        <div
           style={{
-            fontSize: "12px",
-            color: playerCount >= 2 ? "#69DB7C" : "rgba(244,241,234,0.5)",
-            marginLeft: "4px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            width: "100%",
           }}
         >
-          👥 {playerCount}명 접속 중
-        </span>
+          <span
+            style={{
+              fontSize: "11px",
+              color: "rgba(244,241,234,0.45)",
+              fontWeight: 600,
+              letterSpacing: "1px",
+            }}
+          >
+            참가자
+          </span>
+          <span
+            style={{
+              fontSize: "11px",
+              color: playerCount >= 2 ? "#69DB7C" : "rgba(244,241,234,0.45)",
+            }}
+          >
+            👥 {playerCount}명 접속 중
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "20px",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            flexWrap: "wrap",
+            width: "100%",
+          }}
+        >
+          {playersList.map((p) => {
+            const isMe = p.id === clientIdRef.current;
+            const isPlayerHost = p.id === hostId;
+            const isCurrentDrawer =
+              !!gameData && !practiceMode && gameData.drawerId === p.id;
+            const opponentIndex =
+              playersList
+                .filter((x) => x.id !== clientIdRef.current)
+                .findIndex((x) => x.id === p.id) + 1;
+            const displayName = isMe
+              ? "나"
+              : `상대${playerCount > 2 ? opponentIndex : ""}`;
+            const score = scores[p.id] || 0;
+
+            return (
+              <div
+                key={p.id}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "4px",
+                  minWidth: "56px",
+                }}
+              >
+                <div style={{ position: "relative" }}>
+                  <div
+                    style={{
+                      width: "46px",
+                      height: "46px",
+                      borderRadius: "50%",
+                      background: avatarColorForClientId(p.id),
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "22px",
+                      border: isCurrentDrawer
+                        ? "3px solid #FFD43B"
+                        : isMe
+                        ? "2px solid rgba(255,255,255,0.7)"
+                        : "2px solid rgba(255,255,255,0.15)",
+                      boxShadow: isCurrentDrawer
+                        ? "0 0 0 3px rgba(255,212,59,0.25)"
+                        : "none",
+                      transition: "border 0.2s, box-shadow 0.2s",
+                    }}
+                  >
+                    {p.emoji}
+                  </div>
+                  {isPlayerHost && (
+                    <span
+                      title="방장"
+                      style={{
+                        position: "absolute",
+                        top: "-8px",
+                        right: "-6px",
+                        fontSize: "15px",
+                        filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.5))",
+                      }}
+                    >
+                      👑
+                    </span>
+                  )}
+                  {isCurrentDrawer && (
+                    <span
+                      title="그림꾼"
+                      style={{
+                        position: "absolute",
+                        bottom: "-4px",
+                        right: "-4px",
+                        fontSize: "13px",
+                        background: "#1B1A18",
+                        borderRadius: "50%",
+                        width: "18px",
+                        height: "18px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        border: "1px solid rgba(255,255,255,0.3)",
+                      }}
+                    >
+                      ✏️
+                    </span>
+                  )}
+                </div>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: isMe ? 700 : 500,
+                    color: isMe ? "#F4F1EA" : "rgba(244,241,234,0.7)",
+                  }}
+                >
+                  {displayName}
+                </span>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "#FFD43B",
+                  }}
+                >
+                  🏆 {score}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div
@@ -1355,13 +1480,6 @@ export default function Home() {
                 }}
               >
                 ⏱ {timeLeft}초
-              </span>
-              <span style={{ fontSize: "13px", color: "#F4F1EA" }}>
-                🏆 나 {scores[clientIdRef.current] || 0} : {" "}
-                {Object.entries(scores)
-                  .filter(([id]) => id !== clientIdRef.current)
-                  .reduce((sum, [, v]) => sum + v, 0)}{" "}
-                상대
               </span>
             </div>
 
