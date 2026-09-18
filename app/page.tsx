@@ -169,6 +169,11 @@ export default function Home() {
   }, [gameData]);
 
   const isDrawer = !!gameData && gameData.drawerId === clientIdRef.current;
+
+  // 게임 중(연습 아님)일 땐 내 차례(그림꾼)일 때만 카메라를 보여줌.
+  // 맞히는 사람은 자기 얼굴을 볼 필요가 없으므로 자동으로 꺼둠.
+  const cameraOffForTurn = !practiceMode && !isDrawer;
+  const effectiveCameraHidden = cameraHidden || cameraOffForTurn;
   const isDrawerRef = useRef(false);
   useEffect(() => {
     isDrawerRef.current = isDrawer;
@@ -239,7 +244,7 @@ export default function Home() {
   useBackgroundBlur({
     videoRef,
     outputCanvasRef: bgCanvasRef,
-    enabled: bgBlurOn && !cameraHidden,
+    enabled: bgBlurOn && !effectiveCameraHidden,
     blurAmount: blurStrength,
     frameSkip: 2,
   });
@@ -864,6 +869,9 @@ export default function Home() {
       const camera = new Camera(video, {
         onFrame: async () => {
           if (!video) return;
+          // 내 차례(그림꾼)가 아니고 연습 모드도 아니면 카메라 처리 자체를 건너뜀
+          // (화면에도 안 보이고, 어차피 이 상태에서 그리기도 막혀있음)
+          if (!practiceModeRef.current && !isDrawerRef.current) return;
           await hands.send({ image: video });
           frame += 1;
           if (frame % 2 === 0) {
@@ -1540,7 +1548,7 @@ export default function Home() {
             height: "100%",
             objectFit: "cover",
             transform: "scaleX(-1)",
-            opacity: bgBlurOn || cameraHidden ? 0 : 1,
+            opacity: bgBlurOn || effectiveCameraHidden ? 0 : 1,
           }}
         />
 
@@ -1553,7 +1561,7 @@ export default function Home() {
             width: "100%",
             height: "100%",
             transform: "scaleX(-1)",
-            opacity: bgBlurOn && !cameraHidden ? 1 : 0,
+            opacity: bgBlurOn && !effectiveCameraHidden ? 1 : 0,
           }}
         />
 
@@ -1566,7 +1574,7 @@ export default function Home() {
             width: "100%",
             height: "100%",
             transform: "scaleX(-1)",
-            opacity: cameraHidden ? 0 : 1,
+            opacity: effectiveCameraHidden ? 0 : 1,
           }}
         />
 
@@ -1609,7 +1617,7 @@ export default function Home() {
             카메라 준비 중...
           </div>
         )}
-        {ready && showHint && (
+        {ready && showHint && !cameraOffForTurn && (
           <div
             style={{
               position: "absolute",
@@ -1627,6 +1635,26 @@ export default function Home() {
             스페이스바를 눌러 펜을 켜고, 검지로 그림을 그려보세요
             <br />
             숫자 1~9로 색상, 0으로 지우개
+          </div>
+        )}
+
+        {ready && cameraOffForTurn && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(0,0,0,0.35)",
+              fontSize: "13px",
+              color: "rgba(244,241,234,0.85)",
+              textAlign: "center",
+              padding: "0 20px",
+              lineHeight: 1.6,
+            }}
+          >
+            📷 상대방 차례예요 — 그림을 다 보고 나면 다시 켜질 거예요
           </div>
         )}
       </div>
@@ -1719,7 +1747,7 @@ export default function Home() {
           <button
             key={f.key}
             onClick={() => setFilterMode(f.key)}
-            disabled={cameraHidden}
+            disabled={effectiveCameraHidden}
             style={{
               padding: "6px 14px",
               borderRadius: "16px",
@@ -1729,16 +1757,16 @@ export default function Home() {
                   : "2px solid rgba(255,255,255,0.2)",
               background: "transparent",
               color: "#F4F1EA",
-              cursor: cameraHidden ? "default" : "pointer",
+              cursor: effectiveCameraHidden ? "default" : "pointer",
               fontSize: "13px",
-              opacity: cameraHidden ? 0.4 : 1,
+              opacity: effectiveCameraHidden ? 0.4 : 1,
             }}
           >
             {f.label}
           </button>
         ))}
 
-        {(filterMode === "blur" || bgBlurOn) && !cameraHidden && (
+        {(filterMode === "blur" || bgBlurOn) && !effectiveCameraHidden && (
           <div style={{ display: "flex", gap: "6px", marginLeft: "4px" }}>
             {BLUR_LEVELS.map((level) => (
               <button
@@ -1763,7 +1791,7 @@ export default function Home() {
           </div>
         )}
 
-        {filterMode === "emoji" && !cameraHidden && (
+        {filterMode === "emoji" && !effectiveCameraHidden && (
           <div style={{ display: "flex", gap: "6px", marginLeft: "4px" }}>
             {EMOJIS.map((e) => (
               <button
@@ -1802,19 +1830,19 @@ export default function Home() {
       >
         <button
           onClick={() => setBgBlurOn((prev) => !prev)}
-          disabled={cameraHidden}
+          disabled={effectiveCameraHidden}
           style={{
             padding: "6px 14px",
             borderRadius: "16px",
             border:
-              bgBlurOn && !cameraHidden
+              bgBlurOn && !effectiveCameraHidden
                 ? "2px solid #fff"
                 : "2px solid rgba(255,255,255,0.2)",
             background: "transparent",
             color: "#F4F1EA",
-            cursor: cameraHidden ? "default" : "pointer",
+            cursor: effectiveCameraHidden ? "default" : "pointer",
             fontSize: "13px",
-            opacity: cameraHidden ? 0.4 : 1,
+            opacity: effectiveCameraHidden ? 0.4 : 1,
           }}
         >
           {bgBlurOn ? "배경 블러 끄기" : "배경 블러 켜기"}
@@ -1836,6 +1864,17 @@ export default function Home() {
         >
           {cameraHidden ? "카메라 보이기" : "카메라 숨기고 그림만 보기"}
         </button>
+
+        {cameraOffForTurn && !cameraHidden && (
+          <span
+            style={{
+              fontSize: "11px",
+              color: "rgba(244,241,234,0.45)",
+            }}
+          >
+            (상대방 차례라 카메라가 자동으로 꺼져 있어요)
+          </span>
+        )}
       </div>
 
       {!practiceMode && (
