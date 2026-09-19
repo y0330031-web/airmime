@@ -1109,20 +1109,6 @@ export default function Home() {
           )}
           <span
             style={{
-              fontSize: "13px",
-              width: "18px",
-              height: "18px",
-              borderRadius: "50%",
-              background: avatarColorForClientId(p.id),
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {p.emoji}
-          </span>
-          <span
-            style={{
               flex: 1,
               overflow: "hidden",
               textOverflow: "ellipsis",
