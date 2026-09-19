@@ -1056,9 +1056,7 @@ export default function Home() {
   // 캐치마인드 스타일 좌/우 참가자 컬럼을 위해 방장과 나머지를 분리
   const hostPlayer = playersList.find((p) => p.id === hostId) || null;
   const otherPlayers = playersList.filter((p) => p.id !== hostId);
-  const leftOtherPlayers = otherPlayers.filter((_, i) => i % 2 === 0);
-  const rightOtherPlayers = otherPlayers.filter((_, i) => i % 2 === 1);
-  const EMPTY_SLOTS_PER_SIDE = 3;
+  const EMPTY_SLOTS_TOTAL = 5;
 
   const renderPlayerSlot = (p: PlayerInfo, leader?: boolean) => {
     const isMe = p.id === clientIdRef.current;
@@ -1152,26 +1150,19 @@ export default function Home() {
     </div>
   );
 
-  const leftColumnItems = [
-    ...leftOtherPlayers.map((p) => renderPlayerSlot(p)),
+  const participantColumnItems = [
+    ...otherPlayers.map((p) => renderPlayerSlot(p)),
     ...Array.from({
-      length: Math.max(0, EMPTY_SLOTS_PER_SIDE - leftOtherPlayers.length),
-    }).map((_, i) => renderEmptySlot(`empty-left-${i}`)),
-  ];
-  const rightColumnItems = [
-    ...rightOtherPlayers.map((p) => renderPlayerSlot(p)),
-    ...Array.from({
-      length: Math.max(0, EMPTY_SLOTS_PER_SIDE - rightOtherPlayers.length),
-    }).map((_, i) => renderEmptySlot(`empty-right-${i}`)),
+      length: Math.max(0, EMPTY_SLOTS_TOTAL - otherPlayers.length),
+    }).map((_, i) => renderEmptySlot(`empty-${i}`)),
   ];
 
   return (
     <main
       style={{
         minHeight: "100vh",
-        background:
-          "linear-gradient(180deg, #CFE9FF 0%, #9CC7EE 45%, #6FA4D8 100%)",
-        color: "#173A5E",
+        background: "#1B1A18",
+        color: "#F4F1EA",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -1593,7 +1584,7 @@ export default function Home() {
           flexWrap: "wrap",
         }}
       >
-        {/* 좌측 컬럼: 방장 박스 + 참가자 슬롯 */}
+        {/* 좌측 컬럼: 참가자 (방장 + 나머지 전부 한 줄로) */}
         <div
           style={{
             width: "150px",
@@ -1618,7 +1609,7 @@ export default function Home() {
               방장 대기중
             </div>
           )}
-          {leftColumnItems}
+          {participantColumnItems}
         </div>
 
         {/* 중앙: 페인트보드 + 컨트롤 + 타이머/채팅 */}
@@ -1795,237 +1786,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 색상 팔레트 + 지우개 + 전체지우기 */}
-          <div
-            style={{
-              display: "flex",
-              gap: "6px",
-              alignItems: "center",
-              flexWrap: "wrap",
-              justifyContent: "center",
-              background: "#fff",
-              borderRadius: "14px",
-              padding: "8px 12px",
-              boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
-              width: "100%",
-            }}
-          >
-            {COLORS.map((c, i) => (
-              <button
-                key={c}
-                onClick={() => {
-                  setColor(c);
-                  setIsEraser(false);
-                  setShowHint(false);
-                }}
-                style={{
-                  width: "24px",
-                  height: "24px",
-                  borderRadius: "50%",
-                  background: c,
-                  border:
-                    !isEraser && color === c
-                      ? "2px solid #2D6CB4"
-                      : "2px solid rgba(23,58,94,0.15)",
-                  cursor: "pointer",
-                }}
-                aria-label={`색상 ${i + 1}`}
-              />
-            ))}
-            <button
-              onClick={() => {
-                setIsEraser(true);
-                setShowHint(false);
-              }}
-              style={{
-                padding: "4px 12px",
-                borderRadius: "16px",
-                border: isEraser
-                  ? "2px solid #2D6CB4"
-                  : "2px solid rgba(23,58,94,0.2)",
-                background: "transparent",
-                color: "#173A5E",
-                cursor: "pointer",
-                fontSize: "12px",
-              }}
-            >
-              지우개 (0)
-            </button>
-            <button
-              onClick={handleClearAll}
-              style={{
-                padding: "4px 12px",
-                borderRadius: "16px",
-                border: "2px solid rgba(23,58,94,0.2)",
-                background: "transparent",
-                color: "#173A5E",
-                cursor: "pointer",
-                fontSize: "12px",
-              }}
-            >
-              전체 지우기
-            </button>
-          </div>
-
-          {/* 얼굴 필터 + 배경블러/카메라 숨기기 */}
-          <div
-            style={{
-              display: "flex",
-              gap: "6px",
-              alignItems: "center",
-              flexWrap: "wrap",
-              justifyContent: "center",
-              background: "#fff",
-              borderRadius: "14px",
-              padding: "8px 12px",
-              boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
-              width: "100%",
-            }}
-          >
-            {(
-              [
-                { key: "none", label: "필터 없음" },
-                { key: "blur", label: "블러" },
-                { key: "mosaic", label: "모자이크" },
-                { key: "emoji", label: "이모지" },
-              ] as { key: FilterMode; label: string }[]
-            ).map((f) => (
-              <button
-                key={f.key}
-                onClick={() => setFilterMode(f.key)}
-                disabled={effectiveCameraHidden}
-                style={{
-                  padding: "6px 14px",
-                  borderRadius: "16px",
-                  border:
-                    filterMode === f.key
-                      ? "2px solid #2D6CB4"
-                      : "2px solid rgba(23,58,94,0.2)",
-                  background: "transparent",
-                  color: "#173A5E",
-                  cursor: effectiveCameraHidden ? "default" : "pointer",
-                  fontSize: "13px",
-                  opacity: effectiveCameraHidden ? 0.4 : 1,
-                }}
-              >
-                {f.label}
-              </button>
-            ))}
-
-            {(filterMode === "blur" || bgBlurOn) && !effectiveCameraHidden && (
-              <div style={{ display: "flex", gap: "6px", marginLeft: "4px" }}>
-                {BLUR_LEVELS.map((level) => (
-                  <button
-                    key={level}
-                    onClick={() => setBlurStrength(level)}
-                    style={{
-                      padding: "4px 10px",
-                      borderRadius: "12px",
-                      border:
-                        blurStrength === level
-                          ? "2px solid #2D6CB4"
-                          : "2px solid rgba(23,58,94,0.15)",
-                      background: "transparent",
-                      color: "#173A5E",
-                      fontSize: "12px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {level}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {filterMode === "emoji" && !effectiveCameraHidden && (
-              <div style={{ display: "flex", gap: "6px", marginLeft: "4px" }}>
-                {EMOJIS.map((e) => (
-                  <button
-                    key={e}
-                    onClick={() => setSelectedEmoji(e)}
-                    style={{
-                      width: "30px",
-                      height: "30px",
-                      borderRadius: "8px",
-                      border:
-                        selectedEmoji === e
-                          ? "2px solid #2D6CB4"
-                          : "2px solid rgba(23,58,94,0.15)",
-                      background: "transparent",
-                      fontSize: "16px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {e}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              gap: "6px",
-              alignItems: "center",
-              flexWrap: "wrap",
-              justifyContent: "center",
-              background: "#fff",
-              borderRadius: "14px",
-              padding: "8px 12px",
-              boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
-              width: "100%",
-            }}
-          >
-            <button
-              onClick={() => setBgBlurOn((prev) => !prev)}
-              disabled={effectiveCameraHidden}
-              style={{
-                padding: "6px 14px",
-                borderRadius: "16px",
-                border:
-                  bgBlurOn && !effectiveCameraHidden
-                    ? "2px solid #2D6CB4"
-                    : "2px solid rgba(23,58,94,0.2)",
-                background: "transparent",
-                color: "#173A5E",
-                cursor: effectiveCameraHidden ? "default" : "pointer",
-                fontSize: "13px",
-                opacity: effectiveCameraHidden ? 0.4 : 1,
-              }}
-            >
-              {bgBlurOn ? "배경 블러 끄기" : "배경 블러 켜기"}
-            </button>
-
-            <button
-              onClick={() => setCameraHidden((prev) => !prev)}
-              style={{
-                padding: "6px 14px",
-                borderRadius: "16px",
-                border: cameraHidden
-                  ? "2px solid #2D6CB4"
-                  : "2px solid rgba(23,58,94,0.2)",
-                background: "transparent",
-                color: "#173A5E",
-                cursor: "pointer",
-                fontSize: "13px",
-              }}
-            >
-              {cameraHidden ? "카메라 보이기" : "카메라 숨기고 그림만 보기"}
-            </button>
-
-            {cameraOffForTurn && !cameraHidden && (
-              <span
-                style={{
-                  fontSize: "11px",
-                  color: "rgba(23,58,94,0.5)",
-                }}
-              >
-                (상대방 차례라 카메라가 자동으로 꺼져 있어요)
-              </span>
-            )}
-          </div>
-
           {/* 하단: 디지털 타이머 + 채팅 (캐치마인드처럼 나란히) */}
           <div
             style={{
@@ -2189,16 +1949,274 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 우측 컬럼: 참가자 슬롯 */}
+        {/* 우측 컬럼: 캡쳐 화면 설정 (색상/필터/배경블러/카메라) */}
         <div
           style={{
-            width: "150px",
+            width: "170px",
             display: "flex",
             flexDirection: "column",
             gap: "8px",
           }}
         >
-          {rightColumnItems}
+          <span
+            style={{
+              fontSize: "11px",
+              color: "rgba(244,241,234,0.45)",
+              fontWeight: 700,
+              letterSpacing: "1px",
+              textAlign: "center",
+            }}
+          >
+            화면 설정
+          </span>
+
+          {/* 색상 팔레트 + 지우개 + 전체지우기 */}
+          <div
+            style={{
+              display: "flex",
+              gap: "6px",
+              alignItems: "center",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              background: "#fff",
+              borderRadius: "14px",
+              padding: "8px 10px",
+              boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
+              width: "100%",
+            }}
+          >
+            {COLORS.map((c, i) => (
+              <button
+                key={c}
+                onClick={() => {
+                  setColor(c);
+                  setIsEraser(false);
+                  setShowHint(false);
+                }}
+                style={{
+                  width: "22px",
+                  height: "22px",
+                  borderRadius: "50%",
+                  background: c,
+                  border:
+                    !isEraser && color === c
+                      ? "2px solid #2D6CB4"
+                      : "2px solid rgba(23,58,94,0.15)",
+                  cursor: "pointer",
+                }}
+                aria-label={`색상 ${i + 1}`}
+              />
+            ))}
+            <button
+              onClick={() => {
+                setIsEraser(true);
+                setShowHint(false);
+              }}
+              style={{
+                padding: "4px 10px",
+                borderRadius: "16px",
+                border: isEraser
+                  ? "2px solid #2D6CB4"
+                  : "2px solid rgba(23,58,94,0.2)",
+                background: "transparent",
+                color: "#173A5E",
+                cursor: "pointer",
+                fontSize: "11px",
+              }}
+            >
+              지우개 (0)
+            </button>
+            <button
+              onClick={handleClearAll}
+              style={{
+                padding: "4px 10px",
+                borderRadius: "16px",
+                border: "2px solid rgba(23,58,94,0.2)",
+                background: "transparent",
+                color: "#173A5E",
+                cursor: "pointer",
+                fontSize: "11px",
+              }}
+            >
+              전체 지우기
+            </button>
+          </div>
+
+          {/* 얼굴 필터 */}
+          <div
+            style={{
+              display: "flex",
+              gap: "6px",
+              alignItems: "center",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              background: "#fff",
+              borderRadius: "14px",
+              padding: "8px 10px",
+              boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
+              width: "100%",
+            }}
+          >
+            {(
+              [
+                { key: "none", label: "필터 없음" },
+                { key: "blur", label: "블러" },
+                { key: "mosaic", label: "모자이크" },
+                { key: "emoji", label: "이모지" },
+              ] as { key: FilterMode; label: string }[]
+            ).map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setFilterMode(f.key)}
+                disabled={effectiveCameraHidden}
+                style={{
+                  padding: "5px 10px",
+                  borderRadius: "16px",
+                  border:
+                    filterMode === f.key
+                      ? "2px solid #2D6CB4"
+                      : "2px solid rgba(23,58,94,0.2)",
+                  background: "transparent",
+                  color: "#173A5E",
+                  cursor: effectiveCameraHidden ? "default" : "pointer",
+                  fontSize: "12px",
+                  opacity: effectiveCameraHidden ? 0.4 : 1,
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+
+            {(filterMode === "blur" || bgBlurOn) && !effectiveCameraHidden && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "6px",
+                  flexWrap: "wrap",
+                  justifyContent: "center",
+                }}
+              >
+                {BLUR_LEVELS.map((level) => (
+                  <button
+                    key={level}
+                    onClick={() => setBlurStrength(level)}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: "12px",
+                      border:
+                        blurStrength === level
+                          ? "2px solid #2D6CB4"
+                          : "2px solid rgba(23,58,94,0.15)",
+                      background: "transparent",
+                      color: "#173A5E",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {level}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {filterMode === "emoji" && !effectiveCameraHidden && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "6px",
+                  flexWrap: "wrap",
+                  justifyContent: "center",
+                }}
+              >
+                {EMOJIS.map((e) => (
+                  <button
+                    key={e}
+                    onClick={() => setSelectedEmoji(e)}
+                    style={{
+                      width: "28px",
+                      height: "28px",
+                      borderRadius: "8px",
+                      border:
+                        selectedEmoji === e
+                          ? "2px solid #2D6CB4"
+                          : "2px solid rgba(23,58,94,0.15)",
+                      background: "transparent",
+                      fontSize: "15px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 배경블러 / 카메라 숨기기 */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "6px",
+              alignItems: "center",
+              background: "#fff",
+              borderRadius: "14px",
+              padding: "8px 10px",
+              boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
+              width: "100%",
+            }}
+          >
+            <button
+              onClick={() => setBgBlurOn((prev) => !prev)}
+              disabled={effectiveCameraHidden}
+              style={{
+                padding: "6px 10px",
+                borderRadius: "16px",
+                border:
+                  bgBlurOn && !effectiveCameraHidden
+                    ? "2px solid #2D6CB4"
+                    : "2px solid rgba(23,58,94,0.2)",
+                background: "transparent",
+                color: "#173A5E",
+                cursor: effectiveCameraHidden ? "default" : "pointer",
+                fontSize: "12px",
+                opacity: effectiveCameraHidden ? 0.4 : 1,
+                width: "100%",
+              }}
+            >
+              {bgBlurOn ? "배경 블러 끄기" : "배경 블러 켜기"}
+            </button>
+
+            <button
+              onClick={() => setCameraHidden((prev) => !prev)}
+              style={{
+                padding: "6px 10px",
+                borderRadius: "16px",
+                border: cameraHidden
+                  ? "2px solid #2D6CB4"
+                  : "2px solid rgba(23,58,94,0.2)",
+                background: "transparent",
+                color: "#173A5E",
+                cursor: "pointer",
+                fontSize: "12px",
+                width: "100%",
+              }}
+            >
+              {cameraHidden ? "카메라 보이기" : "카메라 숨기고 그림만 보기"}
+            </button>
+
+            {cameraOffForTurn && !cameraHidden && (
+              <span
+                style={{
+                  fontSize: "10px",
+                  color: "rgba(23,58,94,0.5)",
+                  textAlign: "center",
+                }}
+              >
+                (상대방 차례라 자동으로 꺼져 있어요)
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -2206,7 +2224,7 @@ export default function Home() {
         style={{
           marginTop: "12px",
           fontSize: "12px",
-          color: "rgba(23,58,94,0.6)",
+          color: "rgba(244,241,234,0.6)",
         }}
       >
         스페이스바: 펜 {isPenDown ? "떼기" : "들기"} · 숫자 1~9: 색상 변경 ·
