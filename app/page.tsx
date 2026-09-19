@@ -1053,39 +1053,182 @@ export default function Home() {
     );
   }
 
+  // 캐치마인드 스타일 좌/우 참가자 컬럼을 위해 방장과 나머지를 분리
+  const hostPlayer = playersList.find((p) => p.id === hostId) || null;
+  const otherPlayers = playersList.filter((p) => p.id !== hostId);
+  const leftOtherPlayers = otherPlayers.filter((_, i) => i % 2 === 0);
+  const rightOtherPlayers = otherPlayers.filter((_, i) => i % 2 === 1);
+  const EMPTY_SLOTS_PER_SIDE = 3;
+
+  const renderPlayerSlot = (p: PlayerInfo, leader?: boolean) => {
+    const isMe = p.id === clientIdRef.current;
+    const isPlayerHost = p.id === hostId;
+    const isCurrentDrawer =
+      !!gameData && !practiceMode && gameData.drawerId === p.id;
+    const opponentIndex =
+      playersList
+        .filter((x) => x.id !== clientIdRef.current)
+        .findIndex((x) => x.id === p.id) + 1;
+    const displayName = isMe
+      ? "나"
+      : `상대${playerCount > 2 ? opponentIndex : ""}`;
+    const score = scores[p.id] || 0;
+
+    return (
+      <div
+        key={p.id}
+        style={{
+          border: `2px solid ${
+            leader
+              ? "#F783AC"
+              : isCurrentDrawer
+              ? "#FFD43B"
+              : isMe
+              ? "rgba(255,255,255,0.5)"
+              : "rgba(255,255,255,0.15)"
+          }`,
+          borderRadius: "10px",
+          overflow: "hidden",
+          background: leader ? "rgba(247,131,172,0.1)" : "rgba(255,255,255,0.04)",
+        }}
+      >
+        <div
+          style={{
+            background: leader ? "#F783AC" : isCurrentDrawer ? "#FFD43B" : "rgba(255,255,255,0.08)",
+            color: leader || isCurrentDrawer ? "#1B1A18" : "#F4F1EA",
+            fontSize: "10px",
+            fontWeight: 700,
+            padding: "4px 6px",
+            display: "flex",
+            alignItems: "center",
+            gap: "3px",
+          }}
+        >
+          {leader && (
+            <span style={{ fontSize: "9px", letterSpacing: "1px" }}>방장</span>
+          )}
+          <span
+            style={{
+              fontSize: "13px",
+              width: "18px",
+              height: "18px",
+              borderRadius: "50%",
+              background: avatarColorForClientId(p.id),
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {p.emoji}
+          </span>
+          <span
+            style={{
+              flex: 1,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {displayName}
+          </span>
+          {!leader && isPlayerHost && <span title="방장">👑</span>}
+          {isCurrentDrawer && <span title="그림꾼">✏️</span>}
+        </div>
+        <div
+          style={{
+            padding: "5px",
+            fontSize: "12px",
+            fontWeight: 700,
+            color: "#FFD43B",
+            textAlign: "center",
+            background: "rgba(0,0,0,0.15)",
+          }}
+        >
+          🏆 {score}
+        </div>
+      </div>
+    );
+  };
+
+  const renderEmptySlot = (key: string) => (
+    <div
+      key={key}
+      style={{
+        border: "2px dashed rgba(255,255,255,0.12)",
+        borderRadius: "10px",
+        padding: "14px 6px",
+        textAlign: "center",
+        fontSize: "10px",
+        color: "rgba(244,241,234,0.3)",
+      }}
+    >
+      빈 자리
+    </div>
+  );
+
+  const leftColumnItems = [
+    ...leftOtherPlayers.map((p) => renderPlayerSlot(p)),
+    ...Array.from({
+      length: Math.max(0, EMPTY_SLOTS_PER_SIDE - leftOtherPlayers.length),
+    }).map((_, i) => renderEmptySlot(`empty-left-${i}`)),
+  ];
+  const rightColumnItems = [
+    ...rightOtherPlayers.map((p) => renderPlayerSlot(p)),
+    ...Array.from({
+      length: Math.max(0, EMPTY_SLOTS_PER_SIDE - rightOtherPlayers.length),
+    }).map((_, i) => renderEmptySlot(`empty-right-${i}`)),
+  ];
+
   return (
     <main
       style={{
-        height: "100vh",
-        overflow: "hidden",
-        background: "#1B1A18",
-        color: "#F4F1EA",
+        minHeight: "100vh",
+        background:
+          "linear-gradient(180deg, #CFE9FF 0%, #9CC7EE 45%, #6FA4D8 100%)",
+        color: "#173A5E",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        padding: "12px 16px",
+        padding: "14px 12px 24px",
       }}
     >
+      {/* 상단 바: 로고 + 방 코드 + 신고/나가기 */}
       <div
         style={{
-          width: "min(90vw, 1000px, 82vh)",
+          width: "min(94vw, 1100px)",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          marginBottom: "8px",
+          marginBottom: "10px",
+          flexWrap: "wrap",
+          gap: "8px",
         }}
       >
-        <h1 className={caveat.className} style={{ fontSize: "28px" }}>
-          AirMime
-        </h1>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div
+          style={{
+            background: "linear-gradient(135deg, #4DABF7, #364FC7)",
+            borderRadius: "12px",
+            padding: "4px 18px",
+            boxShadow: "0 3px 0 rgba(0,0,0,0.15)",
+          }}
+        >
+          <h1
+            className={caveat.className}
+            style={{ fontSize: "26px", color: "#fff", margin: 0 }}
+          >
+            AirMime
+          </h1>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span
             style={{
               fontSize: "12px",
-              color: "rgba(244,241,234,0.6)",
-              border: "1px solid rgba(255,255,255,0.15)",
+              fontWeight: 700,
+              color: "#173A5E",
+              background: "#fff",
+              border: "1px solid rgba(23,58,94,0.2)",
               borderRadius: "8px",
-              padding: "3px 8px",
+              padding: "4px 10px",
               letterSpacing: "2px",
             }}
           >
@@ -1096,11 +1239,12 @@ export default function Home() {
             onClick={() => setShowReportForm((prev) => !prev)}
             style={{
               fontSize: "12px",
-              color: "rgba(244,241,234,0.6)",
-              background: "transparent",
-              border: "none",
+              color: "#173A5E",
+              background: "#fff",
+              border: "1px solid rgba(23,58,94,0.2)",
+              borderRadius: "8px",
+              padding: "4px 10px",
               cursor: "pointer",
-              textDecoration: "underline",
             }}
           >
             신고
@@ -1109,11 +1253,13 @@ export default function Home() {
             onClick={handleLeaveRoom}
             style={{
               fontSize: "12px",
-              color: "rgba(244,241,234,0.6)",
-              background: "transparent",
+              color: "#fff",
+              background: "#4C6EF5",
               border: "none",
+              borderRadius: "8px",
+              padding: "4px 10px",
               cursor: "pointer",
-              textDecoration: "underline",
+              fontWeight: 600,
             }}
           >
             나가기
@@ -1121,189 +1267,15 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 참가자 패널: 캐치마인드 스타일 스코어보드 (아바타 + 이름 + 점수, 그림꾼/방장 표시) */}
+      {/* 상태 안내 배너 (연습중 / 제시어 설정 / 게임중) */}
       <div
         style={{
-          width: "min(90vw, 1000px, 82vh)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "6px",
-          marginBottom: "8px",
-          padding: "10px 16px",
-          borderRadius: "14px",
-          border: "1px solid rgba(255,255,255,0.12)",
-          background: "rgba(255,255,255,0.03)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            width: "100%",
-          }}
-        >
-          <span
-            style={{
-              fontSize: "11px",
-              color: "rgba(244,241,234,0.45)",
-              fontWeight: 600,
-              letterSpacing: "1px",
-            }}
-          >
-            참가자
-          </span>
-          <span
-            style={{
-              fontSize: "11px",
-              color: playerCount >= 2 ? "#69DB7C" : "rgba(244,241,234,0.45)",
-            }}
-          >
-            👥 {playerCount}명 접속 중
-          </span>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            gap: "20px",
-            alignItems: "flex-start",
-            justifyContent: "center",
-            flexWrap: "wrap",
-            width: "100%",
-          }}
-        >
-          {playersList.map((p) => {
-            const isMe = p.id === clientIdRef.current;
-            const isPlayerHost = p.id === hostId;
-            const isCurrentDrawer =
-              !!gameData && !practiceMode && gameData.drawerId === p.id;
-            const opponentIndex =
-              playersList
-                .filter((x) => x.id !== clientIdRef.current)
-                .findIndex((x) => x.id === p.id) + 1;
-            const displayName = isMe
-              ? "나"
-              : `상대${playerCount > 2 ? opponentIndex : ""}`;
-            const score = scores[p.id] || 0;
-
-            return (
-              <div
-                key={p.id}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: "4px",
-                  minWidth: "56px",
-                }}
-              >
-                <div style={{ position: "relative" }}>
-                  <div
-                    style={{
-                      width: "46px",
-                      height: "46px",
-                      borderRadius: "50%",
-                      background: avatarColorForClientId(p.id),
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "22px",
-                      border: isCurrentDrawer
-                        ? "3px solid #FFD43B"
-                        : isMe
-                        ? "2px solid rgba(255,255,255,0.7)"
-                        : "2px solid rgba(255,255,255,0.15)",
-                      boxShadow: isCurrentDrawer
-                        ? "0 0 0 3px rgba(255,212,59,0.25)"
-                        : "none",
-                      transition: "border 0.2s, box-shadow 0.2s",
-                    }}
-                  >
-                    {p.emoji}
-                  </div>
-                  {isPlayerHost && (
-                    <span
-                      title="방장"
-                      style={{
-                        position: "absolute",
-                        top: "-8px",
-                        right: "-6px",
-                        fontSize: "15px",
-                        filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.5))",
-                      }}
-                    >
-                      👑
-                    </span>
-                  )}
-                  {isCurrentDrawer && (
-                    <span
-                      title="그림꾼"
-                      style={{
-                        position: "absolute",
-                        bottom: "-4px",
-                        right: "-4px",
-                        fontSize: "13px",
-                        background: "#1B1A18",
-                        borderRadius: "50%",
-                        width: "18px",
-                        height: "18px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        border: "1px solid rgba(255,255,255,0.3)",
-                      }}
-                    >
-                      ✏️
-                    </span>
-                  )}
-                </div>
-                <span
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: isMe ? 700 : 500,
-                    color: isMe ? "#F4F1EA" : "rgba(244,241,234,0.7)",
-                  }}
-                >
-                  {displayName}
-                </span>
-                <span
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    color: "#FFD43B",
-                  }}
-                >
-                  🏆 {score}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div
-        style={{
-          width: "min(90vw, 1000px, 82vh)",
-          marginBottom: "8px",
-          fontSize: "12px",
-          color: "rgba(244,241,234,0.55)",
-          textAlign: "center",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "6px",
-        }}
-      >
-        🔒 상대방에게 내 카메라 화면은 보이지 않아요 — 그린 그림만 공유돼요
-      </div>
-
-      {/* 연습 모드 / 제시어 설정 / 게임 진행 안내 */}
-      <div
-        style={{
-          width: "min(90vw, 1000px, 82vh)",
-          marginBottom: "8px",
+          width: "min(94vw, 1100px)",
+          marginBottom: "10px",
+          background: "#fff",
+          borderRadius: "12px",
+          padding: "8px 14px",
+          boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -1317,10 +1289,11 @@ export default function Home() {
               alignItems: "center",
               justifyContent: "center",
               gap: "10px",
+              flexWrap: "wrap",
             }}
           >
             <span
-              style={{ fontSize: "13px", color: "#FFD43B", fontWeight: 600 }}
+              style={{ fontSize: "13px", color: "#E8590C", fontWeight: 700 }}
             >
               ✏️ 연습 중 (나만 보여요, 상대방에게 공유 안 됨)
             </span>
@@ -1329,9 +1302,9 @@ export default function Home() {
               style={{
                 padding: "4px 10px",
                 borderRadius: "12px",
-                border: "1px solid rgba(255,255,255,0.2)",
+                border: "1px solid rgba(23,58,94,0.2)",
                 background: "transparent",
-                color: "#F4F1EA",
+                color: "#173A5E",
                 fontSize: "12px",
                 cursor: "pointer",
               }}
@@ -1345,8 +1318,8 @@ export default function Home() {
                   padding: "5px 16px",
                   borderRadius: "14px",
                   border: "none",
-                  background: "#69DB7C",
-                  color: "#1B1A18",
+                  background: "#51CF66",
+                  color: "#173A5E",
                   fontWeight: 700,
                   fontSize: "13px",
                   cursor: "pointer",
@@ -1358,7 +1331,7 @@ export default function Home() {
               <span
                 style={{
                   fontSize: "12px",
-                  color: "rgba(244,241,234,0.45)",
+                  color: "rgba(23,58,94,0.55)",
                 }}
               >
                 방장이 게임을 시작하면 알려드릴게요
@@ -1374,17 +1347,22 @@ export default function Home() {
               flexDirection: "column",
               alignItems: "center",
               gap: "8px",
-              padding: "10px 14px",
-              borderRadius: "10px",
-              border: "1px solid rgba(255,255,255,0.15)",
+              padding: "6px 4px",
               width: "100%",
               maxWidth: "480px",
             }}
           >
-            <span style={{ fontSize: "13px", fontWeight: 600 }}>
+            <span style={{ fontSize: "13px", fontWeight: 700 }}>
               제시어를 어떻게 정할까요?
             </span>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                flexWrap: "wrap",
+                justifyContent: "center",
+              }}
+            >
               <button
                 onClick={handleAutoPrompt}
                 disabled={startingGame}
@@ -1393,8 +1371,8 @@ export default function Home() {
                   borderRadius: "12px",
                   border: "none",
                   background: "#4DABF7",
-                  color: "#1B1A18",
-                  fontWeight: 600,
+                  color: "#173A5E",
+                  fontWeight: 700,
                   fontSize: "13px",
                   cursor: startingGame ? "default" : "pointer",
                   opacity: startingGame ? 0.6 : 1,
@@ -1402,7 +1380,13 @@ export default function Home() {
               >
                 자동으로 받기
               </button>
-              <span style={{ fontSize: "12px", color: "rgba(244,241,234,0.5)", alignSelf: "center" }}>
+              <span
+                style={{
+                  fontSize: "12px",
+                  color: "rgba(23,58,94,0.5)",
+                  alignSelf: "center",
+                }}
+              >
                 또는
               </span>
               <input
@@ -1412,9 +1396,9 @@ export default function Home() {
                 style={{
                   padding: "6px 10px",
                   borderRadius: "10px",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  background: "transparent",
-                  color: "#F4F1EA",
+                  border: "1px solid rgba(23,58,94,0.25)",
+                  background: "#F4F8FD",
+                  color: "#173A5E",
                   fontSize: "13px",
                   width: "140px",
                 }}
@@ -1426,13 +1410,12 @@ export default function Home() {
                   padding: "6px 14px",
                   borderRadius: "12px",
                   border: "none",
-                  background: "#69DB7C",
-                  color: "#1B1A18",
-                  fontWeight: 600,
+                  background: "#51CF66",
+                  color: "#173A5E",
+                  fontWeight: 700,
                   fontSize: "13px",
                   cursor: startingGame ? "default" : "pointer",
-                  opacity:
-                    startingGame || !customPromptInput.trim() ? 0.6 : 1,
+                  opacity: startingGame || !customPromptInput.trim() ? 0.6 : 1,
                 }}
               >
                 이 제시어로 시작
@@ -1442,7 +1425,7 @@ export default function Home() {
               onClick={() => setShowPromptSetup(false)}
               style={{
                 fontSize: "12px",
-                color: "rgba(244,241,234,0.5)",
+                color: "rgba(23,58,94,0.5)",
                 background: "transparent",
                 border: "none",
                 cursor: "pointer",
@@ -1454,123 +1437,94 @@ export default function Home() {
           </div>
         )}
 
+        {!practiceMode && roundStatus && (
+          <span
+            style={{
+              fontSize: "13px",
+              fontWeight: 700,
+              color:
+                roundStatus.winnerId === clientIdRef.current
+                  ? "#2F9E44"
+                  : roundStatus.winnerId
+                  ? "#E03131"
+                  : "#E8590C",
+            }}
+          >
+            {roundStatus.winnerId === null
+              ? `⏰ 시간 초과! 정답은 "${gameData?.prompt ?? ""}" 였어요`
+              : roundStatus.winnerId === clientIdRef.current
+              ? "🎉 정답! 다음 라운드 준비 중..."
+              : "😢 상대방이 먼저 맞혔어요. 다음 라운드 준비 중..."}
+          </span>
+        )}
+
         {!practiceMode && (
           <div
             style={{
               display: "flex",
-              flexDirection: "column",
               alignItems: "center",
-              gap: "4px",
-              width: "100%",
+              justifyContent: "center",
+              gap: "10px",
+              flexWrap: "wrap",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "14px",
-              }}
-            >
+            {gameData && isDrawer && (
               <span
-                style={{
-                  fontSize: "13px",
-                  fontWeight: 700,
-                  color: timeLeft <= 10 ? "#FF6B6B" : "#F4F1EA",
-                }}
+                style={{ fontSize: "13px", color: "#2F9E44", fontWeight: 700 }}
               >
-                ⏱ {timeLeft}초
-              </span>
-            </div>
-
-            {roundStatus && (
-              <span
-                style={{
-                  fontSize: "13px",
-                  fontWeight: 700,
-                  color:
-                    roundStatus.winnerId === clientIdRef.current
-                      ? "#69DB7C"
-                      : roundStatus.winnerId
-                      ? "#FF6B6B"
-                      : "#FFD43B",
-                }}
-              >
-                {roundStatus.winnerId === null
-                  ? `⏰ 시간 초과! 정답은 "${gameData?.prompt ?? ""}" 였어요`
-                  : roundStatus.winnerId === clientIdRef.current
-                  ? "🎉 정답! 다음 라운드 준비 중..."
-                  : "😢 상대방이 먼저 맞혔어요. 다음 라운드 준비 중..."}
+                🎨 당신이 그림꾼! 제시어: {gameData.prompt}
               </span>
             )}
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "10px",
-                flexWrap: "wrap",
-              }}
-            >
-              {gameData && isDrawer && (
-                <span
-                  style={{
-                    fontSize: "13px",
-                    color: "#69DB7C",
-                    fontWeight: 700,
-                  }}
-                >
-                  🎨 당신이 그림꾼! 제시어: {gameData.prompt}
-                </span>
-              )}
-              {gameData && !isDrawer && (
-                <span
-                  style={{
-                    fontSize: "13px",
-                    color: "#FFD43B",
-                    fontWeight: 600,
-                  }}
-                >
-                  🤔 상대방이 그리는 중이에요! 채팅에 정답을 입력해보세요
-                </span>
-              )}
-              {!gameData && (
-                <span
-                  style={{ fontSize: "13px", color: "rgba(244,241,234,0.6)" }}
-                >
-                  🎮 게임 중
-                </span>
-              )}
-              {isHost && (
-                <button
-                  onClick={handleBackToPractice}
-                  style={{
-                    padding: "4px 10px",
-                    borderRadius: "12px",
-                    border: "1px solid rgba(255,255,255,0.2)",
-                    background: "transparent",
-                    color: "#F4F1EA",
-                    fontSize: "12px",
-                    cursor: "pointer",
-                  }}
-                >
-                  연습으로 돌아가기
-                </button>
-              )}
-            </div>
+            {gameData && !isDrawer && (
+              <span
+                style={{ fontSize: "13px", color: "#E8590C", fontWeight: 700 }}
+              >
+                🤔 상대방이 그리는 중이에요! 채팅에 정답을 입력해보세요
+              </span>
+            )}
+            {!gameData && (
+              <span style={{ fontSize: "13px", color: "rgba(23,58,94,0.6)" }}>
+                🎮 게임 중
+              </span>
+            )}
+            {isHost && (
+              <button
+                onClick={handleBackToPractice}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(23,58,94,0.2)",
+                  background: "transparent",
+                  color: "#173A5E",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                }}
+              >
+                연습으로 돌아가기
+              </button>
+            )}
           </div>
         )}
+
+        <span
+          style={{
+            fontSize: "11px",
+            color: "rgba(23,58,94,0.5)",
+          }}
+        >
+          🔒 상대방에게 내 카메라 화면은 보이지 않아요 — 그린 그림만 공유돼요
+        </span>
       </div>
 
       {showReportForm && (
         <div
           style={{
-            width: "min(90vw, 1000px, 82vh)",
-            marginBottom: "8px",
+            width: "min(94vw, 1100px)",
+            marginBottom: "10px",
             padding: "10px 12px",
             borderRadius: "10px",
-            border: "1px solid rgba(255,255,255,0.15)",
+            background: "#fff",
+            boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
             display: "flex",
             gap: "8px",
             alignItems: "center",
@@ -1584,9 +1538,9 @@ export default function Home() {
               flex: 1,
               padding: "8px 10px",
               borderRadius: "8px",
-              border: "1px solid rgba(255,255,255,0.2)",
-              background: "transparent",
-              color: "#F4F1EA",
+              border: "1px solid rgba(23,58,94,0.2)",
+              background: "#F4F8FD",
+              color: "#173A5E",
               fontSize: "13px",
             }}
           />
@@ -1598,8 +1552,8 @@ export default function Home() {
               borderRadius: "8px",
               border: "none",
               background: "#FF6B6B",
-              color: "#1B1A18",
-              fontWeight: 600,
+              color: "#fff",
+              fontWeight: 700,
               fontSize: "13px",
               cursor: reportSubmitting ? "default" : "pointer",
               opacity: reportSubmitting || !reportText.trim() ? 0.6 : 1,
@@ -1615,9 +1569,9 @@ export default function Home() {
             style={{
               padding: "8px 12px",
               borderRadius: "8px",
-              border: "1px solid rgba(255,255,255,0.2)",
+              border: "1px solid rgba(23,58,94,0.2)",
               background: "transparent",
-              color: "#F4F1EA",
+              color: "#173A5E",
               fontSize: "13px",
               cursor: "pointer",
             }}
@@ -1630,10 +1584,11 @@ export default function Home() {
       {reportDone && (
         <div
           style={{
-            width: "min(90vw, 1000px, 82vh)",
-            marginBottom: "8px",
+            width: "min(94vw, 1100px)",
+            marginBottom: "10px",
             fontSize: "12px",
-            color: "#69DB7C",
+            color: "#2F9E44",
+            fontWeight: 700,
             textAlign: "center",
           }}
         >
@@ -1641,459 +1596,631 @@ export default function Home() {
         </div>
       )}
 
+      {/* 메인 게임 영역: 좌측 참가자 컬럼 / 중앙 페인트보드+컨트롤+채팅 / 우측 참가자 컬럼 */}
       <div
         style={{
-          position: "relative",
-          width: "min(90vw, 1000px, 82vh)",
-          aspectRatio: "16 / 9",
-          borderRadius: "12px",
-          overflow: "hidden",
-          background: "#1B1A18",
-          boxShadow: "0 0 0 1px rgba(255,255,255,0.08)",
-          flexShrink: 0,
-        }}
-      >
-        {/* 원본 비디오: 배경블러 켜져있거나 카메라 숨김이면 투명 처리 (계속 재생은 되어야 손/얼굴 인식이 작동함) */}
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            transform: "scaleX(-1)",
-            opacity: bgBlurOn || effectiveCameraHidden ? 0 : 1,
-          }}
-        />
-
-        {/* 배경 전체 블러 레이어 */}
-        <canvas
-          ref={bgCanvasRef}
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            transform: "scaleX(-1)",
-            opacity: bgBlurOn && !effectiveCameraHidden ? 1 : 0,
-          }}
-        />
-
-        {/* 얼굴 필터 레이어 */}
-        <canvas
-          ref={faceCanvasRef}
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            transform: "scaleX(-1)",
-            opacity: effectiveCameraHidden ? 0 : 1,
-          }}
-        />
-
-        {/* 그림 레이어(공유): 게임 모드일 때만 보임 */}
-        <canvas
-          ref={drawCanvasRef}
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            opacity: practiceMode ? 0 : 1,
-          }}
-        />
-
-        {/* 연습 캔버스: 연습 모드일 때만 보임, 상대방에겐 절대 전송 안 됨 */}
-        <canvas
-          ref={practiceCanvasRef}
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            opacity: practiceMode ? 1 : 0,
-          }}
-        />
-
-        {!ready && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "rgba(0,0,0,0.5)",
-              fontSize: "14px",
-            }}
-          >
-            카메라 준비 중...
-          </div>
-        )}
-        {ready && showHint && !cameraOffForTurn && (
-          <div
-            style={{
-              position: "absolute",
-              top: "16px",
-              left: "50%",
-              transform: "translateX(-50%)",
-              background: "rgba(0,0,0,0.6)",
-              padding: "10px 18px",
-              borderRadius: "10px",
-              fontSize: "13px",
-              textAlign: "center",
-              lineHeight: 1.6,
-            }}
-          >
-            스페이스바를 눌러 펜을 켜고, 검지로 그림을 그려보세요
-            <br />
-            숫자 1~9로 색상, 0으로 지우개
-          </div>
-        )}
-
-        {ready && cameraOffForTurn && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "rgba(0,0,0,0.35)",
-              fontSize: "13px",
-              color: "rgba(244,241,234,0.85)",
-              textAlign: "center",
-              padding: "0 20px",
-              lineHeight: 1.6,
-            }}
-          >
-            📷 상대방 차례예요 — 그림을 다 보고 나면 다시 켜질 거예요
-          </div>
-        )}
-      </div>
-
-      <div
-        style={{
-          marginTop: "10px",
           display: "flex",
-          gap: "6px",
-          alignItems: "center",
-          flexWrap: "wrap",
+          gap: "14px",
+          width: "min(94vw, 1100px)",
           justifyContent: "center",
+          alignItems: "flex-start",
+          flexWrap: "wrap",
         }}
       >
-        {COLORS.map((c, i) => (
-          <button
-            key={c}
-            onClick={() => {
-              setColor(c);
-              setIsEraser(false);
-              setShowHint(false);
-            }}
-            style={{
-              width: "24px",
-              height: "24px",
-              borderRadius: "50%",
-              background: c,
-              border:
-                !isEraser && color === c
-                  ? "2px solid #fff"
-                  : "2px solid transparent",
-              cursor: "pointer",
-            }}
-            aria-label={`색상 ${i + 1}`}
-          />
-        ))}
-        <button
-          onClick={() => {
-            setIsEraser(true);
-            setShowHint(false);
-          }}
-          style={{
-            padding: "4px 12px",
-            borderRadius: "16px",
-            border: isEraser
-              ? "2px solid #fff"
-              : "2px solid rgba(255,255,255,0.2)",
-            background: "transparent",
-            color: "#F4F1EA",
-            cursor: "pointer",
-            fontSize: "12px",
-          }}
-        >
-          지우개 (0)
-        </button>
-        <button
-          onClick={handleClearAll}
-          style={{
-            padding: "4px 12px",
-            borderRadius: "16px",
-            border: "2px solid rgba(255,255,255,0.2)",
-            background: "transparent",
-            color: "#F4F1EA",
-            cursor: "pointer",
-            fontSize: "12px",
-          }}
-        >
-          전체 지우기
-        </button>
-      </div>
-
-      <div
-        style={{
-          marginTop: "8px",
-          display: "flex",
-          gap: "6px",
-          alignItems: "center",
-          flexWrap: "wrap",
-          justifyContent: "center",
-        }}
-      >
-        {(
-          [
-            { key: "none", label: "필터 없음" },
-            { key: "blur", label: "블러" },
-            { key: "mosaic", label: "모자이크" },
-            { key: "emoji", label: "이모지" },
-          ] as { key: FilterMode; label: string }[]
-        ).map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setFilterMode(f.key)}
-            disabled={effectiveCameraHidden}
-            style={{
-              padding: "6px 14px",
-              borderRadius: "16px",
-              border:
-                filterMode === f.key
-                  ? "2px solid #fff"
-                  : "2px solid rgba(255,255,255,0.2)",
-              background: "transparent",
-              color: "#F4F1EA",
-              cursor: effectiveCameraHidden ? "default" : "pointer",
-              fontSize: "13px",
-              opacity: effectiveCameraHidden ? 0.4 : 1,
-            }}
-          >
-            {f.label}
-          </button>
-        ))}
-
-        {(filterMode === "blur" || bgBlurOn) && !effectiveCameraHidden && (
-          <div style={{ display: "flex", gap: "6px", marginLeft: "4px" }}>
-            {BLUR_LEVELS.map((level) => (
-              <button
-                key={level}
-                onClick={() => setBlurStrength(level)}
-                style={{
-                  padding: "4px 10px",
-                  borderRadius: "12px",
-                  border:
-                    blurStrength === level
-                      ? "2px solid #fff"
-                      : "2px solid rgba(255,255,255,0.15)",
-                  background: "transparent",
-                  color: "#F4F1EA",
-                  fontSize: "12px",
-                  cursor: "pointer",
-                }}
-              >
-                {level}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {filterMode === "emoji" && !effectiveCameraHidden && (
-          <div style={{ display: "flex", gap: "6px", marginLeft: "4px" }}>
-            {EMOJIS.map((e) => (
-              <button
-                key={e}
-                onClick={() => setSelectedEmoji(e)}
-                style={{
-                  width: "30px",
-                  height: "30px",
-                  borderRadius: "8px",
-                  border:
-                    selectedEmoji === e
-                      ? "2px solid #fff"
-                      : "2px solid rgba(255,255,255,0.15)",
-                  background: "transparent",
-                  fontSize: "16px",
-                  cursor: "pointer",
-                }}
-              >
-                {e}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 배경 블러 / 카메라 숨기기 토글 */}
-      <div
-        style={{
-          marginTop: "8px",
-          display: "flex",
-          gap: "6px",
-          alignItems: "center",
-          flexWrap: "wrap",
-          justifyContent: "center",
-        }}
-      >
-        <button
-          onClick={() => setBgBlurOn((prev) => !prev)}
-          disabled={effectiveCameraHidden}
-          style={{
-            padding: "6px 14px",
-            borderRadius: "16px",
-            border:
-              bgBlurOn && !effectiveCameraHidden
-                ? "2px solid #fff"
-                : "2px solid rgba(255,255,255,0.2)",
-            background: "transparent",
-            color: "#F4F1EA",
-            cursor: effectiveCameraHidden ? "default" : "pointer",
-            fontSize: "13px",
-            opacity: effectiveCameraHidden ? 0.4 : 1,
-          }}
-        >
-          {bgBlurOn ? "배경 블러 끄기" : "배경 블러 켜기"}
-        </button>
-
-        <button
-          onClick={() => setCameraHidden((prev) => !prev)}
-          style={{
-            padding: "6px 14px",
-            borderRadius: "16px",
-            border: cameraHidden
-              ? "2px solid #fff"
-              : "2px solid rgba(255,255,255,0.2)",
-            background: "transparent",
-            color: "#F4F1EA",
-            cursor: "pointer",
-            fontSize: "13px",
-          }}
-        >
-          {cameraHidden ? "카메라 보이기" : "카메라 숨기고 그림만 보기"}
-        </button>
-
-        {cameraOffForTurn && !cameraHidden && (
-          <span
-            style={{
-              fontSize: "11px",
-              color: "rgba(244,241,234,0.45)",
-            }}
-          >
-            (상대방 차례라 카메라가 자동으로 꺼져 있어요)
-          </span>
-        )}
-      </div>
-
-      {!practiceMode && (
+        {/* 좌측 컬럼: 방장 박스 + 참가자 슬롯 */}
         <div
           style={{
-            width: "min(90vw, 1000px, 82vh)",
-            marginTop: "8px",
+            width: "150px",
             display: "flex",
             flexDirection: "column",
-            border: "1px solid rgba(255,255,255,0.15)",
-            borderRadius: "10px",
-            overflow: "hidden",
+            gap: "8px",
           }}
         >
-          <div
-            ref={chatListRef}
-            style={{
-              height: "70px",
-              overflowY: "auto",
-              padding: "6px 10px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "3px",
-            }}
-          >
-            {chatMessages.length === 0 && (
-              <span
-                style={{
-                  fontSize: "12px",
-                  color: "rgba(244,241,234,0.4)",
-                }}
-              >
-                여기에 정답을 입력해보세요
-              </span>
-            )}
-            {chatMessages.map((m) => (
-              <span
-                key={m.id}
-                style={{
-                  fontSize: "12px",
-                  color: m.correct
-                    ? "#69DB7C"
-                    : m.senderId === clientIdRef.current
-                    ? "#F4F1EA"
-                    : "rgba(244,241,234,0.7)",
-                  fontWeight: m.correct ? 700 : 400,
-                }}
-              >
-                {m.senderId === clientIdRef.current ? "나" : "상대"}:{" "}
-                {m.correct ? "🎉 정답!" : m.text}
-              </span>
-            ))}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              borderTop: "1px solid rgba(255,255,255,0.1)",
-            }}
-          >
-            <input
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleSendChat();
-                }
-              }}
-              placeholder={isDrawer ? "채팅 보내기" : "정답을 입력하세요"}
+          {hostPlayer ? (
+            renderPlayerSlot(hostPlayer, true)
+          ) : (
+            <div
               style={{
-                flex: 1,
-                padding: "6px 10px",
-                border: "none",
-                background: "transparent",
-                color: "#F4F1EA",
-                fontSize: "12px",
-                outline: "none",
-              }}
-            />
-            <button
-              onClick={handleSendChat}
-              style={{
-                padding: "6px 14px",
-                border: "none",
-                background: "rgba(255,255,255,0.08)",
-                color: "#F4F1EA",
-                fontSize: "12px",
-                cursor: "pointer",
+                border: "2px dashed rgba(255,255,255,0.5)",
+                borderRadius: "10px",
+                padding: "14px 6px",
+                textAlign: "center",
+                fontSize: "10px",
+                color: "rgba(255,255,255,0.7)",
               }}
             >
-              전송
+              방장 대기중
+            </div>
+          )}
+          {leftColumnItems}
+        </div>
+
+        {/* 중앙: 페인트보드 + 컨트롤 + 타이머/채팅 */}
+        <div
+          style={{
+            flex: "1 1 420px",
+            minWidth: "280px",
+            maxWidth: "640px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "10px",
+          }}
+        >
+          {/* 노트북 스타일 페인트보드 프레임 */}
+          <div
+            style={{
+              background: "#FFFDF7",
+              borderRadius: "14px 14px 6px 6px",
+              padding: "10px 10px 12px",
+              width: "100%",
+              boxShadow: "0 4px 0 rgba(0,0,0,0.12)",
+              border: "2px solid #2D6CB4",
+            }}
+          >
+            <div
+              style={{
+                textAlign: "center",
+                fontSize: "11px",
+                letterSpacing: "4px",
+                color: "#2D6CB4",
+                fontWeight: 800,
+                marginBottom: "8px",
+              }}
+            >
+              PAINT BOARD
+            </div>
+
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                aspectRatio: "16 / 9",
+                borderRadius: "8px",
+                overflow: "hidden",
+                background: "#1B1A18",
+                flexShrink: 0,
+              }}
+            >
+              {/* 원본 비디오: 배경블러 켜져있거나 카메라 숨김이면 투명 처리 (계속 재생은 되어야 손/얼굴 인식이 작동함) */}
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  transform: "scaleX(-1)",
+                  opacity: bgBlurOn || effectiveCameraHidden ? 0 : 1,
+                }}
+              />
+
+              {/* 배경 전체 블러 레이어 */}
+              <canvas
+                ref={bgCanvasRef}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  transform: "scaleX(-1)",
+                  opacity: bgBlurOn && !effectiveCameraHidden ? 1 : 0,
+                }}
+              />
+
+              {/* 얼굴 필터 레이어 */}
+              <canvas
+                ref={faceCanvasRef}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  transform: "scaleX(-1)",
+                  opacity: effectiveCameraHidden ? 0 : 1,
+                }}
+              />
+
+              {/* 그림 레이어(공유): 게임 모드일 때만 보임 */}
+              <canvas
+                ref={drawCanvasRef}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  opacity: practiceMode ? 0 : 1,
+                }}
+              />
+
+              {/* 연습 캔버스: 연습 모드일 때만 보임, 상대방에겐 절대 전송 안 됨 */}
+              <canvas
+                ref={practiceCanvasRef}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  opacity: practiceMode ? 1 : 0,
+                }}
+              />
+
+              {!ready && (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "rgba(0,0,0,0.5)",
+                    fontSize: "14px",
+                    color: "#F4F1EA",
+                  }}
+                >
+                  카메라 준비 중...
+                </div>
+              )}
+              {ready && showHint && !cameraOffForTurn && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "16px",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    background: "rgba(0,0,0,0.6)",
+                    padding: "10px 18px",
+                    borderRadius: "10px",
+                    fontSize: "13px",
+                    textAlign: "center",
+                    lineHeight: 1.6,
+                    color: "#F4F1EA",
+                  }}
+                >
+                  스페이스바를 눌러 펜을 켜고, 검지로 그림을 그려보세요
+                  <br />
+                  숫자 1~9로 색상, 0으로 지우개
+                </div>
+              )}
+
+              {ready && cameraOffForTurn && (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    background: "rgba(0,0,0,0.35)",
+                    fontSize: "13px",
+                    color: "rgba(244,241,234,0.85)",
+                    textAlign: "center",
+                    padding: "0 20px",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  📷 상대방 차례예요 — 그림을 다 보고 나면 다시 켜질 거예요
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 색상 팔레트 + 지우개 + 전체지우기 */}
+          <div
+            style={{
+              display: "flex",
+              gap: "6px",
+              alignItems: "center",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              background: "#fff",
+              borderRadius: "14px",
+              padding: "8px 12px",
+              boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
+              width: "100%",
+            }}
+          >
+            {COLORS.map((c, i) => (
+              <button
+                key={c}
+                onClick={() => {
+                  setColor(c);
+                  setIsEraser(false);
+                  setShowHint(false);
+                }}
+                style={{
+                  width: "24px",
+                  height: "24px",
+                  borderRadius: "50%",
+                  background: c,
+                  border:
+                    !isEraser && color === c
+                      ? "2px solid #2D6CB4"
+                      : "2px solid rgba(23,58,94,0.15)",
+                  cursor: "pointer",
+                }}
+                aria-label={`색상 ${i + 1}`}
+              />
+            ))}
+            <button
+              onClick={() => {
+                setIsEraser(true);
+                setShowHint(false);
+              }}
+              style={{
+                padding: "4px 12px",
+                borderRadius: "16px",
+                border: isEraser
+                  ? "2px solid #2D6CB4"
+                  : "2px solid rgba(23,58,94,0.2)",
+                background: "transparent",
+                color: "#173A5E",
+                cursor: "pointer",
+                fontSize: "12px",
+              }}
+            >
+              지우개 (0)
+            </button>
+            <button
+              onClick={handleClearAll}
+              style={{
+                padding: "4px 12px",
+                borderRadius: "16px",
+                border: "2px solid rgba(23,58,94,0.2)",
+                background: "transparent",
+                color: "#173A5E",
+                cursor: "pointer",
+                fontSize: "12px",
+              }}
+            >
+              전체 지우기
             </button>
           </div>
+
+          {/* 얼굴 필터 + 배경블러/카메라 숨기기 */}
+          <div
+            style={{
+              display: "flex",
+              gap: "6px",
+              alignItems: "center",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              background: "#fff",
+              borderRadius: "14px",
+              padding: "8px 12px",
+              boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
+              width: "100%",
+            }}
+          >
+            {(
+              [
+                { key: "none", label: "필터 없음" },
+                { key: "blur", label: "블러" },
+                { key: "mosaic", label: "모자이크" },
+                { key: "emoji", label: "이모지" },
+              ] as { key: FilterMode; label: string }[]
+            ).map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setFilterMode(f.key)}
+                disabled={effectiveCameraHidden}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "16px",
+                  border:
+                    filterMode === f.key
+                      ? "2px solid #2D6CB4"
+                      : "2px solid rgba(23,58,94,0.2)",
+                  background: "transparent",
+                  color: "#173A5E",
+                  cursor: effectiveCameraHidden ? "default" : "pointer",
+                  fontSize: "13px",
+                  opacity: effectiveCameraHidden ? 0.4 : 1,
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+
+            {(filterMode === "blur" || bgBlurOn) && !effectiveCameraHidden && (
+              <div style={{ display: "flex", gap: "6px", marginLeft: "4px" }}>
+                {BLUR_LEVELS.map((level) => (
+                  <button
+                    key={level}
+                    onClick={() => setBlurStrength(level)}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: "12px",
+                      border:
+                        blurStrength === level
+                          ? "2px solid #2D6CB4"
+                          : "2px solid rgba(23,58,94,0.15)",
+                      background: "transparent",
+                      color: "#173A5E",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {level}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {filterMode === "emoji" && !effectiveCameraHidden && (
+              <div style={{ display: "flex", gap: "6px", marginLeft: "4px" }}>
+                {EMOJIS.map((e) => (
+                  <button
+                    key={e}
+                    onClick={() => setSelectedEmoji(e)}
+                    style={{
+                      width: "30px",
+                      height: "30px",
+                      borderRadius: "8px",
+                      border:
+                        selectedEmoji === e
+                          ? "2px solid #2D6CB4"
+                          : "2px solid rgba(23,58,94,0.15)",
+                      background: "transparent",
+                      fontSize: "16px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: "6px",
+              alignItems: "center",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              background: "#fff",
+              borderRadius: "14px",
+              padding: "8px 12px",
+              boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
+              width: "100%",
+            }}
+          >
+            <button
+              onClick={() => setBgBlurOn((prev) => !prev)}
+              disabled={effectiveCameraHidden}
+              style={{
+                padding: "6px 14px",
+                borderRadius: "16px",
+                border:
+                  bgBlurOn && !effectiveCameraHidden
+                    ? "2px solid #2D6CB4"
+                    : "2px solid rgba(23,58,94,0.2)",
+                background: "transparent",
+                color: "#173A5E",
+                cursor: effectiveCameraHidden ? "default" : "pointer",
+                fontSize: "13px",
+                opacity: effectiveCameraHidden ? 0.4 : 1,
+              }}
+            >
+              {bgBlurOn ? "배경 블러 끄기" : "배경 블러 켜기"}
+            </button>
+
+            <button
+              onClick={() => setCameraHidden((prev) => !prev)}
+              style={{
+                padding: "6px 14px",
+                borderRadius: "16px",
+                border: cameraHidden
+                  ? "2px solid #2D6CB4"
+                  : "2px solid rgba(23,58,94,0.2)",
+                background: "transparent",
+                color: "#173A5E",
+                cursor: "pointer",
+                fontSize: "13px",
+              }}
+            >
+              {cameraHidden ? "카메라 보이기" : "카메라 숨기고 그림만 보기"}
+            </button>
+
+            {cameraOffForTurn && !cameraHidden && (
+              <span
+                style={{
+                  fontSize: "11px",
+                  color: "rgba(23,58,94,0.5)",
+                }}
+              >
+                (상대방 차례라 카메라가 자동으로 꺼져 있어요)
+              </span>
+            )}
+          </div>
+
+          {/* 하단: 디지털 타이머 + 채팅 (캐치마인드처럼 나란히) */}
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              width: "100%",
+              alignItems: "stretch",
+              flexWrap: "wrap",
+            }}
+          >
+            {/* 디지털 타이머 */}
+            <div
+              style={{
+                background: "#0B2340",
+                border: "2px solid #1B4B7A",
+                borderRadius: "10px",
+                padding: "8px 14px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: "88px",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "9px",
+                  color: "#7EC8E3",
+                  letterSpacing: "2px",
+                  fontWeight: 700,
+                }}
+              >
+                TIME
+              </span>
+              <span
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: "24px",
+                  fontWeight: 700,
+                  color:
+                    !practiceMode && timeLeft <= 10 ? "#FF6B6B" : "#4DABF7",
+                }}
+              >
+                {practiceMode ? "--" : String(timeLeft).padStart(2, "0")}
+              </span>
+            </div>
+
+            {/* 채팅 */}
+            <div
+              style={{
+                flex: 1,
+                minWidth: "180px",
+                display: "flex",
+                flexDirection: "column",
+                background: "#fff",
+                borderRadius: "10px",
+                overflow: "hidden",
+                boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  color: "#2D6CB4",
+                  letterSpacing: "2px",
+                  padding: "5px 10px 0",
+                }}
+              >
+                CHATTING
+              </div>
+              <div
+                ref={chatListRef}
+                style={{
+                  height: "62px",
+                  overflowY: "auto",
+                  padding: "4px 10px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "2px",
+                }}
+              >
+                {chatMessages.length === 0 && (
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: "rgba(23,58,94,0.35)",
+                    }}
+                  >
+                    {practiceMode
+                      ? "게임이 시작되면 여기서 정답을 맞혀보세요"
+                      : "여기에 정답을 입력해보세요"}
+                  </span>
+                )}
+                {chatMessages.map((m) => (
+                  <span
+                    key={m.id}
+                    style={{
+                      fontSize: "12px",
+                      color: m.correct
+                        ? "#2F9E44"
+                        : m.senderId === clientIdRef.current
+                        ? "#173A5E"
+                        : "rgba(23,58,94,0.7)",
+                      fontWeight: m.correct ? 700 : 400,
+                    }}
+                  >
+                    {m.senderId === clientIdRef.current ? "나" : "상대"}:{" "}
+                    {m.correct ? "🎉 정답!" : m.text}
+                  </span>
+                ))}
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  borderTop: "1px solid rgba(23,58,94,0.12)",
+                }}
+              >
+                <input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleSendChat();
+                    }
+                  }}
+                  placeholder={
+                    practiceMode
+                      ? "채팅 보내기"
+                      : isDrawer
+                      ? "채팅 보내기"
+                      : "정답을 입력하세요"
+                  }
+                  style={{
+                    flex: 1,
+                    padding: "6px 10px",
+                    border: "none",
+                    background: "transparent",
+                    color: "#173A5E",
+                    fontSize: "12px",
+                    outline: "none",
+                  }}
+                />
+                <button
+                  onClick={handleSendChat}
+                  style={{
+                    padding: "6px 14px",
+                    border: "none",
+                    background: "#E7F1FF",
+                    color: "#2D6CB4",
+                    fontWeight: 700,
+                    fontSize: "12px",
+                    cursor: "pointer",
+                  }}
+                >
+                  전송
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      )}
+
+        {/* 우측 컬럼: 참가자 슬롯 */}
+        <div
+          style={{
+            width: "150px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+          }}
+        >
+          {rightColumnItems}
+        </div>
+      </div>
 
       <p
         style={{
-          marginTop: "8px",
+          marginTop: "12px",
           fontSize: "12px",
-          color: "rgba(244,241,234,0.6)",
+          color: "rgba(23,58,94,0.6)",
         }}
       >
         스페이스바: 펜 {isPenDown ? "떼기" : "들기"} · 숫자 1~9: 색상 변경 ·
