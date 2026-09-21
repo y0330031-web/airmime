@@ -817,6 +817,8 @@ export default function Home() {
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
+      // 손가락(터치)/펜만 그리기 허용, 마우스는 무시 (트랙패드 오작동/데스크톱 방지)
+      if (e.pointerType === "mouse") return;
       // 게임 모드(연습 아님)일 땐 그림꾼만 그릴 수 있음
       if (!practiceModeRef.current && !isDrawerRef.current) return;
       const canvas = e.currentTarget;
@@ -892,7 +894,7 @@ export default function Home() {
             marginBottom: "40px",
           }}
         >
-          화면에 손가락(터치)이나 마우스로 그림을 그려 친구와 맞혀보세요
+          화면에 손가락을 대고 그림을 그려 친구와 맞혀보세요
         </p>
 
         <div
@@ -1515,7 +1517,7 @@ export default function Home() {
             color: "rgba(23,58,94,0.5)",
           }}
         >
-          🖊️ 화면을 손가락이나 마우스로 눌러서 그림을 그려보세요
+          🖊️ 화면을 손가락으로 눌러서 그림을 그려보세요
         </span>
       </div>
 
@@ -1713,7 +1715,7 @@ export default function Home() {
                   opacity: practiceMode ? 0 : 1,
                   pointerEvents: practiceMode ? "none" : "auto",
                   touchAction: "none",
-                  cursor: isEraser ? "cell" : "crosshair",
+                  cursor: "default",
                 }}
               />
 
@@ -1732,7 +1734,7 @@ export default function Home() {
                   opacity: practiceMode ? 1 : 0,
                   pointerEvents: practiceMode ? "auto" : "none",
                   touchAction: "none",
-                  cursor: isEraser ? "cell" : "crosshair",
+                  cursor: "default",
                 }}
               />
 
@@ -1753,7 +1755,7 @@ export default function Home() {
                     pointerEvents: "none",
                   }}
                 >
-                  화면을 손가락이나 마우스로 누른 채 움직여서 그려보세요
+                  화면을 손가락으로 누른 채 움직여서 그려보세요
                   <br />
                   숫자 1~9로 색상, 0으로 지우개
                 </div>
@@ -2047,7 +2049,7 @@ export default function Home() {
           color: "rgba(244,241,234,0.6)",
         }}
       >
-        화면을 누른 채 드래그해서 그리기 · 숫자 1~9: 색상 변경 · 0: 지우개
+        화면을 손가락으로 누른 채 그리기 · 숫자 1~9: 색상 변경 · 0: 지우개
       </p>
     </main>
   );
