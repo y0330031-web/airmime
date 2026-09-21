@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Caveat } from "next/font/google";
 import { db } from "@/lib/firebase";
 import {
@@ -14,7 +14,6 @@ import {
   off,
   onDisconnect,
 } from "firebase/database";
-import { useBackgroundBlur } from "@/hooks/useBackgroundBlur";
 
 const caveat = Caveat({ subsets: ["latin"], weight: ["700"] });
 
@@ -30,9 +29,7 @@ const COLORS = [
   "#F783AC",
 ];
 
-const EMOJIS = ["🐱", "🐶", "🐼", "👽"];
-
-// 참가자 아바타로 쓸 이모지 팔레트 (필터용 EMOJIS와는 별개)
+// 참가자 아바타로 쓸 이모지 팔레트
 const PLAYER_EMOJIS = ["🦊", "🐰", "🐻", "🐹", "🦁", "🐨", "🐷", "🐵"];
 // 아바타 원 배경색 팔레트 (그리기용 COLORS와는 별개, 살짝 톤 다운된 색)
 const AVATAR_BG_COLORS = [
@@ -61,8 +58,6 @@ function avatarColorForClientId(id: string): string {
   }
   return AVATAR_BG_COLORS[hash % AVATAR_BG_COLORS.length];
 }
-
-type FilterMode = "none" | "blur" | "mosaic" | "emoji";
 
 const WORD_LIST = [
   "사과",
@@ -126,35 +121,17 @@ export default function Home() {
   const MAX_PLAYERS_OPTIONS = [2, 3, 4, 6, 8] as const;
   const [maxPlayersChoice, setMaxPlayersChoice] = useState<number>(2);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
   const drawCanvasRef = useRef<HTMLCanvasElement>(null);
   const practiceCanvasRef = useRef<HTMLCanvasElement>(null);
-  const faceCanvasRef = useRef<HTMLCanvasElement>(null);
-  const bgCanvasRef = useRef<HTMLCanvasElement>(null);
-  const offscreenRef = useRef<HTMLCanvasElement | null>(null);
 
-  const handsRef = useRef<any>(null);
-  const faceDetectionRef = useRef<any>(null);
-  const cameraRef = useRef<any>(null);
   const lastPointRef = useRef<Point | null>(null);
+  const isPointerDownRef = useRef(false);
 
-  const [isPenDown, setIsPenDown] = useState(false);
-  const isPenDownRef = useRef(false);
   const [color, setColor] = useState(COLORS[0]);
   const colorRef = useRef(COLORS[0]);
   const [isEraser, setIsEraser] = useState(false);
   const isEraserRef = useRef(false);
-  const [ready, setReady] = useState(false);
   const [showHint, setShowHint] = useState(true);
-
-  const [filterMode, setFilterMode] = useState<FilterMode>("none");
-  const filterModeRef = useRef<FilterMode>("none");
-  const [selectedEmoji, setSelectedEmoji] = useState(EMOJIS[0]);
-  const selectedEmojiRef = useRef(EMOJIS[0]);
-
-  // ---------- 새로 추가: 배경 블러 / 카메라 숨기기 ----------
-  const [bgBlurOn, setBgBlurOn] = useState(false);
-  const [cameraHidden, setCameraHidden] = useState(false);
 
   // 사용자 신고 기능
   const [showReportForm, setShowReportForm] = useState(false);
@@ -195,10 +172,6 @@ export default function Home() {
 
   const isDrawer = !!gameData && gameData.drawerId === clientIdRef.current;
 
-  // 게임 중(연습 아님)일 땐 내 차례(그림꾼)일 때만 카메라를 보여줌.
-  // 맞히는 사람은 자기 얼굴을 볼 필요가 없으므로 자동으로 꺼둠.
-  const cameraOffForTurn = !practiceMode && !isDrawer;
-  const effectiveCameraHidden = cameraHidden || cameraOffForTurn;
   const isDrawerRef = useRef(false);
   useEffect(() => {
     isDrawerRef.current = isDrawer;
@@ -235,20 +208,9 @@ export default function Home() {
   const [chatInput, setChatInput] = useState("");
   const chatListRef = useRef<HTMLDivElement>(null);
 
-  // 블러 강도 (얼굴 블러 + 배경 블러 공통 적용)
-  const BLUR_LEVELS = [30, 50, 70, 100] as const;
-  const [blurStrength, setBlurStrength] = useState<number>(50);
-  const blurStrengthRef = useRef<number>(50);
-  useEffect(() => {
-    blurStrengthRef.current = blurStrength;
-  }, [blurStrength]);
-
   const roomCodeRef = useRef<string>("");
   const clearSignalSeenRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    isPenDownRef.current = isPenDown;
-  }, [isPenDown]);
   useEffect(() => {
     colorRef.current = color;
   }, [color]);
@@ -258,21 +220,6 @@ export default function Home() {
   useEffect(() => {
     roomCodeRef.current = roomCode;
   }, [roomCode]);
-  useEffect(() => {
-    filterModeRef.current = filterMode;
-  }, [filterMode]);
-  useEffect(() => {
-    selectedEmojiRef.current = selectedEmoji;
-  }, [selectedEmoji]);
-
-  // 배경 전체 블러 훅 연결 (인물만 선명, 배경은 흐리게)
-  useBackgroundBlur({
-    videoRef,
-    outputCanvasRef: bgCanvasRef,
-    enabled: bgBlurOn && !effectiveCameraHidden,
-    blurAmount: blurStrength,
-    frameSkip: 2,
-  });
 
   const handleCreateRoom = async () => {
     setIsCreating(true);
@@ -802,12 +749,7 @@ export default function Home() {
       const target = e.target as HTMLElement;
       if (target && ["INPUT", "TEXTAREA"].includes(target.tagName)) return;
 
-      if (e.code === "Space") {
-        e.preventDefault();
-        setIsPenDown((prev) => !prev);
-        setShowHint(false);
-        lastPointRef.current = null;
-      } else if (e.key >= "1" && e.key <= "9") {
+      if (e.key >= "1" && e.key <= "9") {
         const idx = parseInt(e.key, 10) - 1;
         setColor(COLORS[idx]);
         setIsEraser(false);
@@ -821,228 +763,106 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [view]);
 
-  const onHandsResults = useCallback(
-    (results: any) => {
-      // 게임 모드(연습 아님)일 땐 그림꾼만 그릴 수 있음
-      if (!practiceModeRef.current && !isDrawerRef.current) {
-        lastPointRef.current = null;
-        return;
-      }
+  // 캔버스 좌표 변환: 화면에 표시된 크기(rect) 기준 위치를 캔버스 내부 해상도로 변환
+  const getCanvasPoint = (
+    canvas: HTMLCanvasElement,
+    clientX: number,
+    clientY: number
+  ): Point => {
+    const rect = canvas.getBoundingClientRect();
+    const x = ((clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((clientY - rect.top) / rect.height) * canvas.height;
+    return { x, y };
+  };
 
-      const targetCanvas = practiceModeRef.current
-        ? practiceCanvasRef.current
-        : drawCanvasRef.current;
-      if (!targetCanvas) return;
-      const ctx = targetCanvas.getContext("2d");
+  // 손가락/마우스로 화면을 누른 상태에서 움직일 때 실제로 선을 그리는 함수
+  const drawToPoint = useCallback(
+    (canvas: HTMLCanvasElement, point: Point) => {
+      const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      if (
-        results.multiHandLandmarks &&
-        results.multiHandLandmarks.length > 0
-      ) {
-        const landmarks = results.multiHandLandmarks[0];
-        const indexTip = landmarks[8];
-
-        const x = (1 - indexTip.x) * targetCanvas.width;
-        const y = indexTip.y * targetCanvas.height;
-
-        if (isPenDownRef.current) {
-          ctx.lineCap = "round";
-          ctx.lineJoin = "round";
-
-          if (isEraserRef.current) {
-            ctx.globalCompositeOperation = "destination-out";
-            ctx.lineWidth = 40;
-          } else {
-            ctx.globalCompositeOperation = "source-over";
-            ctx.strokeStyle = colorRef.current;
-            ctx.lineWidth = 6;
-          }
-
-          if (lastPointRef.current) {
-            ctx.beginPath();
-            ctx.moveTo(lastPointRef.current.x, lastPointRef.current.y);
-            ctx.lineTo(x, y);
-            ctx.stroke();
-
-            // 연습 모드일 땐 상대방에게 전송하지 않음
-            if (!practiceModeRef.current) {
-              sendSegment({
-                x1: lastPointRef.current.x / targetCanvas.width,
-                y1: lastPointRef.current.y / targetCanvas.height,
-                x2: x / targetCanvas.width,
-                y2: y / targetCanvas.height,
-                color: colorRef.current,
-                eraser: isEraserRef.current,
-              });
-            }
-          }
-          lastPointRef.current = { x, y };
-        } else {
-          lastPointRef.current = null;
-        }
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      if (isEraserRef.current) {
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.lineWidth = 40;
       } else {
-        lastPointRef.current = null;
+        ctx.globalCompositeOperation = "source-over";
+        ctx.strokeStyle = colorRef.current;
+        ctx.lineWidth = 6;
       }
+
+      if (lastPointRef.current) {
+        ctx.beginPath();
+        ctx.moveTo(lastPointRef.current.x, lastPointRef.current.y);
+        ctx.lineTo(point.x, point.y);
+        ctx.stroke();
+
+        // 연습 모드일 땐 상대방에게 전송하지 않음
+        if (!practiceModeRef.current) {
+          sendSegment({
+            x1: lastPointRef.current.x / canvas.width,
+            y1: lastPointRef.current.y / canvas.height,
+            x2: point.x / canvas.width,
+            y2: point.y / canvas.height,
+            color: colorRef.current,
+            eraser: isEraserRef.current,
+          });
+        }
+      }
+      lastPointRef.current = point;
     },
     [sendSegment]
   );
 
-  const onFaceResults = useCallback((results: any) => {
-    const canvas = faceCanvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      // 게임 모드(연습 아님)일 땐 그림꾼만 그릴 수 있음
+      if (!practiceModeRef.current && !isDrawerRef.current) return;
+      const canvas = e.currentTarget;
+      canvas.setPointerCapture(e.pointerId);
+      isPointerDownRef.current = true;
+      lastPointRef.current = getCanvasPoint(canvas, e.clientX, e.clientY);
+      setShowHint(false);
+    },
+    []
+  );
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (!isPointerDownRef.current) return;
+      if (!practiceModeRef.current && !isDrawerRef.current) return;
+      const canvas = e.currentTarget;
+      const point = getCanvasPoint(canvas, e.clientX, e.clientY);
+      drawToPoint(canvas, point);
+    },
+    [drawToPoint]
+  );
 
-    const mode = filterModeRef.current;
-    if (mode === "none") return;
-    if (!results.detections || results.detections.length === 0) return;
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      isPointerDownRef.current = false;
+      lastPointRef.current = null;
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {}
+    },
+    []
+  );
 
-    for (const det of results.detections) {
-      const box = det.boundingBox;
-      const bw = box.width * canvas.width;
-      const bh = box.height * canvas.height;
-      const bx = box.xCenter * canvas.width - bw / 2;
-      const by = box.yCenter * canvas.height - bh / 2;
-
-      const pad = 0.25;
-      const sx = Math.max(0, bx - bw * pad);
-      const sy = Math.max(0, by - bh * pad * 1.4);
-      const sw = Math.min(canvas.width - sx, bw * (1 + pad * 2));
-      const sh = Math.min(canvas.height - sy, bh * (1 + pad * 2.4));
-
-      if (mode === "blur") {
-        ctx.save();
-        ctx.filter = `blur(${blurStrengthRef.current}px)`;
-        ctx.drawImage(video, sx, sy, sw, sh, sx, sy, sw, sh);
-        ctx.restore();
-      } else if (mode === "mosaic") {
-        const off = offscreenRef.current;
-        if (off) {
-          const size = 14;
-          off.width = size;
-          off.height = size;
-          const octx = off.getContext("2d");
-          if (octx) {
-            octx.drawImage(video, sx, sy, sw, sh, 0, 0, size, size);
-            ctx.save();
-            ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(off, 0, 0, size, size, sx, sy, sw, sh);
-            ctx.restore();
-          }
-        }
-      } else if (mode === "emoji") {
-        ctx.save();
-        const fontSize = Math.max(sw, sh) * 1.1;
-        ctx.font = `${fontSize}px serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(selectedEmojiRef.current, sx + sw / 2, sy + sh / 2);
-        ctx.restore();
-      }
-    }
-  }, []);
-
+  // 캔버스 내부 해상도를 한 번 고정 (16:9). 실제 화면 크기는 CSS(width/height: 100%)가 맞춰줌
   useEffect(() => {
     if (view !== "room") return;
-    let cancelled = false;
-
-    offscreenRef.current = document.createElement("canvas");
-
-    const setup = async () => {
-      const { Hands } = await import("@mediapipe/hands");
-      const { FaceDetection } = await import("@mediapipe/face_detection");
-      const { Camera } = await import("@mediapipe/camera_utils");
-
-      if (cancelled) return;
-
-      const hands = new Hands({
-        locateFile: (file) =>
-          `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-      });
-      hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.7,
-        minTrackingConfidence: 0.6,
-      });
-      hands.onResults(onHandsResults);
-      handsRef.current = hands;
-
-      const faceDetection = new FaceDetection({
-        locateFile: (file) =>
-          `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`,
-      });
-      faceDetection.setOptions({
-        model: "short",
-        minDetectionConfidence: 0.6,
-      });
-      faceDetection.onResults(onFaceResults);
-      faceDetectionRef.current = faceDetection;
-
-      const video = videoRef.current;
-      if (!video) return;
-
-      let frame = 0;
-      const camera = new Camera(video, {
-        onFrame: async () => {
-          if (!video) return;
-          // 내 차례(그림꾼)가 아니고 연습 모드도 아니면 카메라 처리 자체를 건너뜀
-          // (화면에도 안 보이고, 어차피 이 상태에서 그리기도 막혀있음)
-          if (!practiceModeRef.current && !isDrawerRef.current) return;
-          await hands.send({ image: video });
-          frame += 1;
-          if (frame % 2 === 0) {
-            await faceDetection.send({ image: video });
-          }
-        },
-        width: 1280,
-        height: 720,
-      });
-
-      camera.start();
-      cameraRef.current = camera;
-      setReady(true);
-    };
-
-    setup();
-
-    return () => {
-      cancelled = true;
-      cameraRef.current?.stop?.();
-      handsRef.current?.close?.();
-      faceDetectionRef.current?.close?.();
-      setReady(false);
-    };
-  }, [view, onHandsResults, onFaceResults]);
-
-  useEffect(() => {
     const drawCanvas = drawCanvasRef.current;
     const practiceCanvas = practiceCanvasRef.current;
-    const faceCanvas = faceCanvasRef.current;
-    const bgCanvas = bgCanvasRef.current;
-    const video = videoRef.current;
-    if (!drawCanvas || !practiceCanvas || !faceCanvas || !bgCanvas || !video)
-      return;
-
-    const resize = () => {
-      const w = video.videoWidth || 1280;
-      const h = video.videoHeight || 720;
-      drawCanvas.width = w;
-      drawCanvas.height = h;
-      practiceCanvas.width = w;
-      practiceCanvas.height = h;
-      faceCanvas.width = w;
-      faceCanvas.height = h;
-      bgCanvas.width = w;
-      bgCanvas.height = h;
-    };
-
-    video.addEventListener("loadedmetadata", resize);
-    return () => video.removeEventListener("loadedmetadata", resize);
+    if (drawCanvas) {
+      drawCanvas.width = 960;
+      drawCanvas.height = 540;
+    }
+    if (practiceCanvas) {
+      practiceCanvas.width = 960;
+      practiceCanvas.height = 540;
+    }
   }, [view]);
 
   if (view === "landing") {
@@ -1072,7 +892,7 @@ export default function Home() {
             marginBottom: "40px",
           }}
         >
-          허공에 손가락으로 그림을 그려 친구와 맞혀보세요
+          화면에 손가락(터치)이나 마우스로 그림을 그려 친구와 맞혀보세요
         </p>
 
         <div
@@ -1695,7 +1515,7 @@ export default function Home() {
             color: "rgba(23,58,94,0.5)",
           }}
         >
-          🔒 상대방에게 내 카메라 화면은 보이지 않아요 — 그린 그림만 공유돼요
+          🖊️ 화면을 손가락이나 마우스로 눌러서 그림을 그려보세요
         </span>
       </div>
 
@@ -1874,94 +1694,49 @@ export default function Home() {
                 aspectRatio: "16 / 9",
                 borderRadius: "8px",
                 overflow: "hidden",
-                background: "#1B1A18",
+                background: "#FFFFFF",
                 flexShrink: 0,
               }}
             >
-              {/* 원본 비디오: 배경블러 켜져있거나 카메라 숨김이면 투명 처리 (계속 재생은 되어야 손/얼굴 인식이 작동함) */}
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  transform: "scaleX(-1)",
-                  opacity: bgBlurOn || effectiveCameraHidden ? 0 : 1,
-                }}
-              />
-
-              {/* 배경 전체 블러 레이어 */}
-              <canvas
-                ref={bgCanvasRef}
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  width: "100%",
-                  height: "100%",
-                  transform: "scaleX(-1)",
-                  opacity: bgBlurOn && !effectiveCameraHidden ? 1 : 0,
-                }}
-              />
-
-              {/* 얼굴 필터 레이어 */}
-              <canvas
-                ref={faceCanvasRef}
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  width: "100%",
-                  height: "100%",
-                  transform: "scaleX(-1)",
-                  opacity: effectiveCameraHidden ? 0 : 1,
-                }}
-              />
-
-              {/* 그림 레이어(공유): 게임 모드일 때만 보임 */}
+              {/* 그림 레이어(공유): 게임 모드일 때만 보임/조작 가능 */}
               <canvas
                 ref={drawCanvasRef}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerLeave={handlePointerUp}
                 style={{
                   position: "absolute",
                   inset: 0,
                   width: "100%",
                   height: "100%",
                   opacity: practiceMode ? 0 : 1,
+                  pointerEvents: practiceMode ? "none" : "auto",
+                  touchAction: "none",
+                  cursor: isEraser ? "cell" : "crosshair",
                 }}
               />
 
-              {/* 연습 캔버스: 연습 모드일 때만 보임, 상대방에겐 절대 전송 안 됨 */}
+              {/* 연습 캔버스: 연습 모드일 때만 보임/조작 가능, 상대방에겐 절대 전송 안 됨 */}
               <canvas
                 ref={practiceCanvasRef}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerLeave={handlePointerUp}
                 style={{
                   position: "absolute",
                   inset: 0,
                   width: "100%",
                   height: "100%",
                   opacity: practiceMode ? 1 : 0,
+                  pointerEvents: practiceMode ? "auto" : "none",
+                  touchAction: "none",
+                  cursor: isEraser ? "cell" : "crosshair",
                 }}
               />
 
-              {!ready && (
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    background: "rgba(0,0,0,0.5)",
-                    fontSize: "14px",
-                    color: "#F4F1EA",
-                  }}
-                >
-                  카메라 준비 중...
-                </div>
-              )}
-              {ready && showHint && !cameraOffForTurn && (
+              {showHint && (practiceMode || isDrawer) && (
                 <div
                   style={{
                     position: "absolute",
@@ -1975,15 +1750,16 @@ export default function Home() {
                     textAlign: "center",
                     lineHeight: 1.6,
                     color: "#F4F1EA",
+                    pointerEvents: "none",
                   }}
                 >
-                  스페이스바를 눌러 펜을 켜고, 검지로 그림을 그려보세요
+                  화면을 손가락이나 마우스로 누른 채 움직여서 그려보세요
                   <br />
                   숫자 1~9로 색상, 0으로 지우개
                 </div>
               )}
 
-              {ready && cameraOffForTurn && (
+              {!practiceMode && !isDrawer && (
                 <div
                   style={{
                     position: "absolute",
@@ -1991,15 +1767,16 @@ export default function Home() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    background: "rgba(0,0,0,0.35)",
+                    background: "rgba(27,26,24,0.06)",
                     fontSize: "13px",
-                    color: "rgba(244,241,234,0.85)",
+                    color: "rgba(27,26,24,0.6)",
                     textAlign: "center",
                     padding: "0 20px",
                     lineHeight: 1.6,
+                    pointerEvents: "none",
                   }}
                 >
-                  📷 상대방 차례예요 — 그림을 다 보고 나면 다시 켜질 거예요
+                  ✏️ 상대방이 그리는 중이에요 — 여기서는 그릴 수 없어요
                 </div>
               )}
             </div>
@@ -2168,7 +1945,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 우측 컬럼: 캡쳐 화면 설정 (색상/필터/배경블러/카메라) */}
+        {/* 우측 컬럼: 그리기 도구 */}
         <div
           style={{
             width: "170px",
@@ -2186,7 +1963,7 @@ export default function Home() {
               textAlign: "center",
             }}
           >
-            화면 설정
+            그리기 도구
           </span>
 
           {/* 색상 팔레트 + 지우개 + 전체지우기 */}
@@ -2260,182 +2037,6 @@ export default function Home() {
               전체 지우기
             </button>
           </div>
-
-          {/* 얼굴 필터 */}
-          <div
-            style={{
-              display: "flex",
-              gap: "6px",
-              alignItems: "center",
-              flexWrap: "wrap",
-              justifyContent: "center",
-              background: "#fff",
-              borderRadius: "14px",
-              padding: "8px 10px",
-              boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
-              width: "100%",
-            }}
-          >
-            {(
-              [
-                { key: "none", label: "필터 없음" },
-                { key: "blur", label: "블러" },
-                { key: "mosaic", label: "모자이크" },
-                { key: "emoji", label: "이모지" },
-              ] as { key: FilterMode; label: string }[]
-            ).map((f) => (
-              <button
-                key={f.key}
-                onClick={() => setFilterMode(f.key)}
-                disabled={effectiveCameraHidden}
-                style={{
-                  padding: "5px 10px",
-                  borderRadius: "16px",
-                  border:
-                    filterMode === f.key
-                      ? "2px solid #2D6CB4"
-                      : "2px solid rgba(23,58,94,0.2)",
-                  background: "transparent",
-                  color: "#173A5E",
-                  cursor: effectiveCameraHidden ? "default" : "pointer",
-                  fontSize: "12px",
-                  opacity: effectiveCameraHidden ? 0.4 : 1,
-                }}
-              >
-                {f.label}
-              </button>
-            ))}
-
-            {(filterMode === "blur" || bgBlurOn) && !effectiveCameraHidden && (
-              <div
-                style={{
-                  display: "flex",
-                  gap: "6px",
-                  flexWrap: "wrap",
-                  justifyContent: "center",
-                }}
-              >
-                {BLUR_LEVELS.map((level) => (
-                  <button
-                    key={level}
-                    onClick={() => setBlurStrength(level)}
-                    style={{
-                      padding: "4px 10px",
-                      borderRadius: "12px",
-                      border:
-                        blurStrength === level
-                          ? "2px solid #2D6CB4"
-                          : "2px solid rgba(23,58,94,0.15)",
-                      background: "transparent",
-                      color: "#173A5E",
-                      fontSize: "12px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {level}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {filterMode === "emoji" && !effectiveCameraHidden && (
-              <div
-                style={{
-                  display: "flex",
-                  gap: "6px",
-                  flexWrap: "wrap",
-                  justifyContent: "center",
-                }}
-              >
-                {EMOJIS.map((e) => (
-                  <button
-                    key={e}
-                    onClick={() => setSelectedEmoji(e)}
-                    style={{
-                      width: "28px",
-                      height: "28px",
-                      borderRadius: "8px",
-                      border:
-                        selectedEmoji === e
-                          ? "2px solid #2D6CB4"
-                          : "2px solid rgba(23,58,94,0.15)",
-                      background: "transparent",
-                      fontSize: "15px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {e}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* 배경블러 / 카메라 숨기기 */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "6px",
-              alignItems: "center",
-              background: "#fff",
-              borderRadius: "14px",
-              padding: "8px 10px",
-              boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
-              width: "100%",
-            }}
-          >
-            <button
-              onClick={() => setBgBlurOn((prev) => !prev)}
-              disabled={effectiveCameraHidden}
-              style={{
-                padding: "6px 10px",
-                borderRadius: "16px",
-                border:
-                  bgBlurOn && !effectiveCameraHidden
-                    ? "2px solid #2D6CB4"
-                    : "2px solid rgba(23,58,94,0.2)",
-                background: "transparent",
-                color: "#173A5E",
-                cursor: effectiveCameraHidden ? "default" : "pointer",
-                fontSize: "12px",
-                opacity: effectiveCameraHidden ? 0.4 : 1,
-                width: "100%",
-              }}
-            >
-              {bgBlurOn ? "배경 블러 끄기" : "배경 블러 켜기"}
-            </button>
-
-            <button
-              onClick={() => setCameraHidden((prev) => !prev)}
-              style={{
-                padding: "6px 10px",
-                borderRadius: "16px",
-                border: cameraHidden
-                  ? "2px solid #2D6CB4"
-                  : "2px solid rgba(23,58,94,0.2)",
-                background: "transparent",
-                color: "#173A5E",
-                cursor: "pointer",
-                fontSize: "12px",
-                width: "100%",
-              }}
-            >
-              {cameraHidden ? "카메라 보이기" : "카메라 숨기고 그림만 보기"}
-            </button>
-
-            {cameraOffForTurn && !cameraHidden && (
-              <span
-                style={{
-                  fontSize: "10px",
-                  color: "rgba(23,58,94,0.5)",
-                  textAlign: "center",
-                }}
-              >
-                (상대방 차례라 자동으로 꺼져 있어요)
-              </span>
-            )}
-          </div>
         </div>
       </div>
 
@@ -2446,8 +2047,7 @@ export default function Home() {
           color: "rgba(244,241,234,0.6)",
         }}
       >
-        스페이스바: 펜 {isPenDown ? "떼기" : "들기"} · 숫자 1~9: 색상 변경 ·
-        0: 지우개
+        화면을 누른 채 드래그해서 그리기 · 숫자 1~9: 색상 변경 · 0: 지우개
       </p>
     </main>
   );
