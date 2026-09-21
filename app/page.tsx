@@ -121,6 +121,10 @@ export default function Home() {
   const [joinInput, setJoinInput] = useState("");
   const [roomError, setRoomError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [createPublic, setCreatePublic] = useState(false);
+  const isPublicRoomRef = useRef(false);
+  const MAX_PLAYERS_OPTIONS = [2, 3, 4, 6, 8] as const;
+  const [maxPlayersChoice, setMaxPlayersChoice] = useState<number>(2);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const drawCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -172,6 +176,8 @@ export default function Home() {
   const playersRef = useRef<Record<string, any>>({});
   const playerInfoRef = useRef<Record<string, { joinedAt: number; emoji: string }>>({});
   const [playerCount, setPlayerCount] = useState(0);
+  const [roomMaxPlayers, setRoomMaxPlayers] = useState<number>(2);
+  const maxPlayersRef = useRef<number>(2);
   const [playersList, setPlayersList] = useState<PlayerInfo[]>([]);
   const [hostId, setHostId] = useState<string | null>(null);
   const isHost = hostId === clientIdRef.current;
@@ -276,13 +282,67 @@ export default function Home() {
       await set(ref(db, `rooms/${code}/meta`), {
         createdAt: Date.now(),
         hostId: clientIdRef.current,
+        isPublic: createPublic,
+        maxPlayers: maxPlayersChoice,
       });
       await set(ref(db, `rooms/${code}/gameStarted`), false);
+      if (createPublic) {
+        await set(ref(db, `publicRooms/${code}`), {
+          createdAt: Date.now(),
+          playerCount: 1,
+          maxPlayers: maxPlayersChoice,
+        }).catch((err) =>
+          console.error("public room index write failed:", err)
+        );
+      }
       setRoomCode(code);
       setView("room");
     } catch (err) {
       console.error(err);
       setRoomError("방을 만들지 못했어요. 다시 시도해주세요.");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  // 랜덤 매치: 공개방 목록(publicRooms) 중 자리가 남은 방에 바로 들어가고,
+  // 없으면 내가 새 공개방을 만들어서 다른 사람이 매치되길 기다림
+  const handleRandomMatch = async () => {
+    setIsCreating(true);
+    setRoomError(null);
+    try {
+      const snap = await get(ref(db, "publicRooms"));
+      const val = snap.val() || {};
+      const candidates = Object.entries(val as Record<string, any>)
+        .filter(
+          ([, info]) => (info?.playerCount || 0) < (info?.maxPlayers || 2)
+        )
+        .map(([code]) => code);
+
+      if (candidates.length > 0) {
+        const code = candidates[Math.floor(Math.random() * candidates.length)];
+        setRoomCode(code);
+        setView("room");
+      } else {
+        const code = generateRoomCode();
+        await set(ref(db, `rooms/${code}/meta`), {
+          createdAt: Date.now(),
+          hostId: clientIdRef.current,
+          isPublic: true,
+          maxPlayers: maxPlayersChoice,
+        });
+        await set(ref(db, `rooms/${code}/gameStarted`), false);
+        await set(ref(db, `publicRooms/${code}`), {
+          createdAt: Date.now(),
+          playerCount: 1,
+          maxPlayers: maxPlayersChoice,
+        });
+        setRoomCode(code);
+        setView("room");
+      }
+    } catch (err) {
+      console.error(err);
+      setRoomError("랜덤 매치에 실패했어요. 다시 시도해주세요.");
     } finally {
       setIsCreating(false);
     }
@@ -302,6 +362,17 @@ export default function Home() {
         setIsCreating(false);
         return;
       }
+      const metaVal = snap.val() || {};
+      const roomMax = metaVal.maxPlayers || 2;
+      const playersSnap = await get(ref(db, `rooms/${joinInput}/players`));
+      const currentCount = playersSnap.exists()
+        ? Object.keys(playersSnap.val() || {}).length
+        : 0;
+      if (currentCount >= roomMax) {
+        setRoomError(`방이 꽉 찼어요 (최대 ${roomMax}명).`);
+        setIsCreating(false);
+        return;
+      }
       setRoomCode(joinInput);
       setView("room");
     } catch (err) {
@@ -313,6 +384,10 @@ export default function Home() {
   };
 
   const handleLeaveRoom = () => {
+    // 나 혼자 대기 중이던 공개방이었다면 목록에서도 바로 지움 (best-effort)
+    if (isPublicRoomRef.current && playerCount <= 1 && roomCodeRef.current) {
+      remove(ref(db, `publicRooms/${roomCodeRef.current}`)).catch(() => {});
+    }
     setView("landing");
     setRoomCode("");
     setJoinInput("");
@@ -417,6 +492,10 @@ export default function Home() {
     onValue(metaFbRef, (snap) => {
       const val = snap.val();
       setHostId(val?.hostId || null);
+      isPublicRoomRef.current = !!val?.isPublic;
+      const max = val?.maxPlayers || 2;
+      maxPlayersRef.current = max;
+      setRoomMaxPlayers(max);
     });
 
     const drawSegment = (seg: StrokeSegment) => {
@@ -521,8 +600,26 @@ export default function Home() {
     onValue(playersFbRef, (snap) => {
       const val = snap.val() || {};
       playersRef.current = val;
-      setPlayerCount(Object.keys(val).length);
+      const count = Object.keys(val).length;
+      setPlayerCount(count);
       recomputePlayersList();
+
+      // 공개방 목록 동기화: 자리가 차면 랜덤 매치 후보에서 빠지고,
+      // 다시 비면(누가 나가면) 후보로 복귀
+      if (isPublicRoomRef.current) {
+        const publicRoomRef = ref(db, `publicRooms/${roomCode}`);
+        if (count >= maxPlayersRef.current) {
+          remove(publicRoomRef).catch(() => {});
+        } else if (count >= 1) {
+          set(publicRoomRef, {
+            createdAt: Date.now(),
+            playerCount: count,
+            maxPlayers: maxPlayersRef.current,
+          }).catch(() => {});
+        } else {
+          remove(publicRoomRef).catch(() => {});
+        }
+      }
     });
 
     onValue(playerInfoFbRef, (snap) => {
@@ -544,6 +641,11 @@ export default function Home() {
       .remove()
       .catch(() => {});
     onDisconnect(myPlayerInfoRef)
+      .remove()
+      .catch(() => {});
+    // 혼자 대기 중이던 방장이 그냥 나가버렸을 때 공개방 목록에서도 사라지게
+    // (다른 참가자가 남아있으면 players 리스너가 알아서 곧바로 다시 채워줌)
+    onDisconnect(ref(db, `publicRooms/${roomCode}`))
       .remove()
       .catch(() => {});
 
@@ -982,6 +1084,53 @@ export default function Home() {
           }}
         >
           <button
+            onClick={handleRandomMatch}
+            disabled={isCreating}
+            style={{
+              padding: "14px",
+              borderRadius: "10px",
+              border: "none",
+              background: "#4DABF7",
+              color: "#1B1A18",
+              fontWeight: 700,
+              fontSize: "15px",
+              cursor: isCreating ? "default" : "pointer",
+              opacity: isCreating ? 0.6 : 1,
+            }}
+          >
+            {isCreating ? "매칭 중..." : "🎲 랜덤 매치"}
+          </button>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              margin: "-6px 0",
+            }}
+          >
+            <div
+              style={{
+                flex: 1,
+                height: "1px",
+                background: "rgba(255,255,255,0.15)",
+              }}
+            />
+            <span
+              style={{ fontSize: "11px", color: "rgba(244,241,234,0.4)" }}
+            >
+              또는
+            </span>
+            <div
+              style={{
+                flex: 1,
+                height: "1px",
+                background: "rgba(255,255,255,0.15)",
+              }}
+            />
+          </div>
+
+          <button
             onClick={handleCreateRoom}
             disabled={isCreating}
             style={{
@@ -998,6 +1147,63 @@ export default function Home() {
           >
             {isCreating ? "만드는 중..." : "방 만들기"}
           </button>
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+              fontSize: "12px",
+              color: "rgba(244,241,234,0.6)",
+              cursor: "pointer",
+              marginTop: "-8px",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={createPublic}
+              onChange={(e) => setCreatePublic(e.target.checked)}
+            />
+            공개방으로 만들기 (랜덤 매치로 찾아올 수 있어요)
+          </label>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+              flexWrap: "wrap",
+              marginTop: "-4px",
+            }}
+          >
+            <span
+              style={{ fontSize: "12px", color: "rgba(244,241,234,0.5)" }}
+            >
+              최대 인원
+            </span>
+            {MAX_PLAYERS_OPTIONS.map((n) => (
+              <button
+                key={n}
+                onClick={() => setMaxPlayersChoice(n)}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "12px",
+                  border:
+                    maxPlayersChoice === n
+                      ? "2px solid #F4F1EA"
+                      : "1px solid rgba(255,255,255,0.2)",
+                  background: "transparent",
+                  color: "#F4F1EA",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                }}
+              >
+                {n}명
+              </button>
+            ))}
+          </div>
 
           <div style={{ display: "flex", gap: "8px" }}>
             <input
@@ -1056,7 +1262,6 @@ export default function Home() {
   // 캐치마인드 스타일 좌/우 참가자 컬럼을 위해 방장과 나머지를 분리
   const hostPlayer = playersList.find((p) => p.id === hostId) || null;
   const otherPlayers = playersList.filter((p) => p.id !== hostId);
-  const EMPTY_SLOTS_TOTAL = 5;
 
   const renderPlayerSlot = (p: PlayerInfo, leader?: boolean) => {
     const isMe = p.id === clientIdRef.current;
@@ -1153,7 +1358,8 @@ export default function Home() {
   const participantColumnItems = [
     ...otherPlayers.map((p) => renderPlayerSlot(p)),
     ...Array.from({
-      length: Math.max(0, EMPTY_SLOTS_TOTAL - otherPlayers.length),
+      // 방장 자리(1명)를 빼고 남은 정원만큼만 빈 자리 표시
+      length: Math.max(0, roomMaxPlayers - 1 - otherPlayers.length),
     }).map((_, i) => renderEmptySlot(`empty-${i}`)),
   ];
 
@@ -1593,6 +1799,19 @@ export default function Home() {
             gap: "8px",
           }}
         >
+          <span
+            style={{
+              fontSize: "11px",
+              color:
+                playerCount >= roomMaxPlayers
+                  ? "#69DB7C"
+                  : "rgba(244,241,234,0.5)",
+              fontWeight: 700,
+              textAlign: "center",
+            }}
+          >
+            👥 {playerCount}/{roomMaxPlayers}명
+          </span>
           {hostPlayer ? (
             renderPlayerSlot(hostPlayer, true)
           ) : (
