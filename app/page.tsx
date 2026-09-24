@@ -104,11 +104,14 @@ interface PlayerInfo {
   id: string;
   emoji: string;
   joinedAt: number;
+  nickname?: string;
 }
 
 function generateRoomCode(): string {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
+
+const NICKNAME_MAX_LEN = 8;
 
 export default function Home() {
   const [view, setView] = useState<"landing" | "room">("landing");
@@ -120,6 +123,15 @@ export default function Home() {
   const isPublicRoomRef = useRef(false);
   const MAX_PLAYERS_OPTIONS = [2, 3, 4, 6, 8] as const;
   const [maxPlayersChoice, setMaxPlayersChoice] = useState<number>(2);
+
+  // 닉네임 (선택 입력, 로비 화면에서 설정하고 방 안에서도 언제든 바꿀 수 있음)
+  const [nickname, setNickname] = useState("");
+  const nicknameRef = useRef("");
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [nicknameDraft, setNicknameDraft] = useState("");
+  useEffect(() => {
+    nicknameRef.current = nickname.trim().slice(0, NICKNAME_MAX_LEN);
+  }, [nickname]);
 
   const drawCanvasRef = useRef<HTMLCanvasElement>(null);
   const practiceCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -151,7 +163,9 @@ export default function Home() {
     Math.random().toString(36).slice(2) + Date.now().toString(36)
   );
   const playersRef = useRef<Record<string, any>>({});
-  const playerInfoRef = useRef<Record<string, { joinedAt: number; emoji: string }>>({});
+  const playerInfoRef = useRef<
+    Record<string, { joinedAt: number; emoji: string; nickname?: string }>
+  >({});
   const [playerCount, setPlayerCount] = useState(0);
   const [roomMaxPlayers, setRoomMaxPlayers] = useState<number>(2);
   const maxPlayersRef = useRef<number>(2);
@@ -346,6 +360,7 @@ export default function Home() {
     setPlayersList([]);
     setShowPromptSetup(false);
     setCustomPromptInput("");
+    setEditingNickname(false);
     const canvas = drawCanvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -415,6 +430,34 @@ export default function Home() {
     const canvas = practiceCanvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  // 닉네임 저장 (로비에서든, 방 안에서든 호출 가능. 방 안이면 Firebase playerInfo도 즉시 갱신)
+  const commitNickname = async (value: string) => {
+    const trimmed = value.trim().slice(0, NICKNAME_MAX_LEN);
+    setNickname(trimmed);
+    nicknameRef.current = trimmed;
+    const code = roomCodeRef.current;
+    if (code) {
+      try {
+        await set(
+          ref(db, `rooms/${code}/playerInfo/${clientIdRef.current}/nickname`),
+          trimmed
+        );
+      } catch (err) {
+        console.error("nickname update failed:", err);
+      }
+    }
+  };
+
+  const handleOpenNicknameEdit = () => {
+    setNicknameDraft(nickname);
+    setEditingNickname(true);
+  };
+
+  const handleSaveNicknameEdit = () => {
+    commitNickname(nicknameDraft);
+    setEditingNickname(false);
   };
 
   useEffect(() => {
@@ -529,7 +572,7 @@ export default function Home() {
 
     // 방 참가자 목록 (그림꾼 무작위 선정 + 참가자 패널 표시에 사용)
     // players: 기존 방식 그대로 boolean 값 (기존 보안 규칙과 호환)
-    // playerInfo: 아바타 이모지 / 입장 시각 같은 부가 정보 (별도 경로라 players 규칙에 영향 없음)
+    // playerInfo: 아바타 이모지 / 닉네임 / 입장 시각 같은 부가 정보 (별도 경로라 players 규칙에 영향 없음)
     const recomputePlayersList = () => {
       const ids = Object.keys(playersRef.current);
       const list: PlayerInfo[] = ids.map((id) => {
@@ -538,6 +581,7 @@ export default function Home() {
           id,
           emoji: info?.emoji || emojiForClientId(id),
           joinedAt: info?.joinedAt ?? 0,
+          nickname: info?.nickname,
         };
       });
       list.sort((a, b) => a.joinedAt - b.joinedAt);
@@ -581,6 +625,7 @@ export default function Home() {
     set(myPlayerInfoRef, {
       joinedAt: Date.now(),
       emoji: emojiForClientId(clientIdRef.current),
+      nickname: nicknameRef.current,
     }).catch((err) =>
       console.error("player register failed (playerInfo):", err)
     );
@@ -891,11 +936,48 @@ export default function Home() {
           style={{
             fontSize: "14px",
             color: "rgba(244,241,234,0.6)",
-            marginBottom: "40px",
+            marginBottom: "24px",
           }}
         >
           화면에 손가락을 대고 그림을 그려 친구와 맞혀보세요
         </p>
+
+        <div
+          style={{
+            width: "min(90vw, 320px)",
+            marginBottom: "16px",
+          }}
+        >
+          <label
+            style={{
+              display: "block",
+              fontSize: "11px",
+              color: "rgba(244,241,234,0.5)",
+              marginBottom: "6px",
+              textAlign: "center",
+            }}
+          >
+            닉네임 (선택, 최대 {NICKNAME_MAX_LEN}자)
+          </label>
+          <input
+            value={nickname}
+            onChange={(e) =>
+              setNickname(e.target.value.slice(0, NICKNAME_MAX_LEN))
+            }
+            placeholder="예: 하니"
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "10px",
+              border: "1px solid rgba(255,255,255,0.2)",
+              background: "transparent",
+              color: "#F4F1EA",
+              fontSize: "15px",
+              textAlign: "center",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
 
         <div
           style={{
@@ -1094,7 +1176,10 @@ export default function Home() {
       playersList
         .filter((x) => x.id !== clientIdRef.current)
         .findIndex((x) => x.id === p.id) + 1;
-    const displayName = isMe
+    const trimmedNickname = p.nickname?.trim();
+    const displayName = trimmedNickname
+      ? trimmedNickname
+      : isMe
       ? "나"
       : `상대${playerCount > 2 ? opponentIndex : ""}`;
     const score = scores[p.id] || 0;
@@ -1139,8 +1224,27 @@ export default function Home() {
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
             }}
+            title={displayName}
           >
             {displayName}
+            {isMe && (
+              <button
+                onClick={handleOpenNicknameEdit}
+                title="닉네임 수정"
+                style={{
+                  marginLeft: "4px",
+                  border: "none",
+                  background: "transparent",
+                  color: "inherit",
+                  opacity: 0.7,
+                  cursor: "pointer",
+                  fontSize: "9px",
+                  padding: 0,
+                }}
+              >
+                ✏️
+              </button>
+            )}
           </span>
           {!leader && isPlayerHost && <span title="방장">👑</span>}
           {isCurrentDrawer && <span title="그림꾼">✏️</span>}
@@ -1271,6 +1375,76 @@ export default function Home() {
           </button>
         </div>
       </div>
+
+      {/* 닉네임 수정 팝업 */}
+      {editingNickname && (
+        <div
+          style={{
+            width: "min(94vw, 1100px)",
+            marginBottom: "10px",
+            padding: "10px 12px",
+            borderRadius: "10px",
+            background: "#fff",
+            boxShadow: "0 2px 0 rgba(0,0,0,0.08)",
+            display: "flex",
+            gap: "8px",
+            alignItems: "center",
+          }}
+        >
+          <input
+            value={nicknameDraft}
+            onChange={(e) =>
+              setNicknameDraft(e.target.value.slice(0, NICKNAME_MAX_LEN))
+            }
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleSaveNicknameEdit();
+              }
+            }}
+            placeholder={`닉네임 (최대 ${NICKNAME_MAX_LEN}자)`}
+            autoFocus
+            style={{
+              flex: 1,
+              padding: "8px 10px",
+              borderRadius: "8px",
+              border: "1px solid rgba(23,58,94,0.2)",
+              background: "#F4F8FD",
+              color: "#173A5E",
+              fontSize: "13px",
+            }}
+          />
+          <button
+            onClick={handleSaveNicknameEdit}
+            style={{
+              padding: "8px 14px",
+              borderRadius: "8px",
+              border: "none",
+              background: "#51CF66",
+              color: "#173A5E",
+              fontWeight: 700,
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            저장
+          </button>
+          <button
+            onClick={() => setEditingNickname(false)}
+            style={{
+              padding: "8px 12px",
+              borderRadius: "8px",
+              border: "1px solid rgba(23,58,94,0.2)",
+              background: "transparent",
+              color: "#173A5E",
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            취소
+          </button>
+        </div>
+      )}
 
       {/* 상태 안내 배너 (연습중 / 제시어 설정 / 게임중) */}
       <div
@@ -1878,23 +2052,31 @@ export default function Home() {
                       : "여기에 정답을 입력해보세요"}
                   </span>
                 )}
-                {chatMessages.map((m) => (
-                  <span
-                    key={m.id}
-                    style={{
-                      fontSize: "12px",
-                      color: m.correct
-                        ? "#2F9E44"
-                        : m.senderId === clientIdRef.current
-                        ? "#173A5E"
-                        : "rgba(23,58,94,0.7)",
-                      fontWeight: m.correct ? 700 : 400,
-                    }}
-                  >
-                    {m.senderId === clientIdRef.current ? "나" : "상대"}:{" "}
-                    {m.correct ? "🎉 정답!" : m.text}
-                  </span>
-                ))}
+                {chatMessages.map((m) => {
+                  const senderNickname = playersList
+                    .find((p) => p.id === m.senderId)
+                    ?.nickname?.trim();
+                  const senderLabel =
+                    m.senderId === clientIdRef.current
+                      ? "나"
+                      : senderNickname || "상대";
+                  return (
+                    <span
+                      key={m.id}
+                      style={{
+                        fontSize: "12px",
+                        color: m.correct
+                          ? "#2F9E44"
+                          : m.senderId === clientIdRef.current
+                          ? "#173A5E"
+                          : "rgba(23,58,94,0.7)",
+                        fontWeight: m.correct ? 700 : 400,
+                      }}
+                    >
+                      {senderLabel}: {m.correct ? "🎉 정답!" : m.text}
+                    </span>
+                  );
+                })}
               </div>
               <div
                 style={{
